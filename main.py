@@ -1,6 +1,11 @@
 import tkinter
 import tkinter.messagebox
 import customtkinter as ctk
+from datetime import datetime
+import calendar
+import json
+import os
+from pathlib import Path
 
 try:
     from to_do_list.applet import TodoApplet
@@ -20,265 +25,506 @@ except ImportError:
     print("Notepad applet not found. Skipping.")
     NotepadApplet = None
 
-ctk.set_appearance_mode("System")
+ctk.set_appearance_mode("Default")
 ctk.set_default_color_theme("blue")
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
+        # Configure light and dark themes
+        self.LIGHT_THEME = {
+            "header_bg": "#2391F0",
+            "sidebar_bg": "#F5F5F5",
+            "main_bg": "#FAE5D5",
+            "document_button_fg": "#0088FF",
+            "pomodoro_button_fg": "#4CABFF",
+            "todo_button_fg": "#8AC9FF",
+            "calendar_bg": "#FFFFFF",
+            "search_bar_bg": "#DFF0FF",
+            "usage_card_bg": "#F3DEDE",
+            "task_card_bg_1": "#B3E5FC",
+            "task_card_bg_2": "#8BC9FF",
+            "task_card_bg_3": "#42A7FF",
+            "recent_files_fg": "#B3E5FC",
+            "text_color": "black"
+        }
+        self.DARK_THEME = {
+            "header_bg": "#210F37",
+            "sidebar_bg": "#112233",
+            "main_bg": "#493E60",
+            "document_button_fg": "#470A70",
+            "pomodoro_button_fg": "#5D3677",
+            "todo_button_fg": "#665075",
+            "calendar_bg": "#342727",
+            "search_bar_bg": "#B46B54",
+            "usage_card_bg": "#4F1C51",
+            "task_card_bg_1": "#570190",
+            "task_card_bg_2": "#621F8E",
+            "task_card_bg_3": "#5F4571",
+            "recent_files_fg": "#585293",
+            "text_color": "white"
+        }
+        self.theme_colors = self.LIGHT_THEME if ctk.get_appearance_mode() == "Light" else self.DARK_THEME
 
         # Track current active applet
         self.current_applet = None
-        self.current_view = "home"
+        self.current_view = "documents"
+        
+        # Usage tracking
+        self.usage_file = Path("app_usage.json")
+        self.start_time = datetime.now()
+        self.total_usage_seconds = self.load_usage_data()
+        self.usage_timer = None
+        self.start_usage_tracking()
 
         # configure window
         self.title("Sapient")
-        self.geometry(f"{1280}x{720}")
+        self.geometry(f"{1400}x{800}")
 
-        # configure grid layout (4x4)
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_columnconfigure((2, 3), weight=0)
-        self.grid_rowconfigure((0, 1, 2), weight=1)
+        # Configure main grid
+        self.grid_columnconfigure(0, weight=0)  # Sidebar
+        self.grid_columnconfigure(1, weight=1)  # Main content
+        self.grid_rowconfigure(0, weight=0)     # Header
+        self.grid_rowconfigure(1, weight=1)     # Content
 
-        # create sidebar frame with widgets
-        self.sidebar_frame = ctk.CTkFrame(self, width=140, corner_radius=10)
-        self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(4, weight=1)
+        # Create header bar
+        self.header_frame = ctk.CTkFrame(self, height=60, fg_color="#2196F3", corner_radius=0)
+        self.header_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.header_frame.grid_propagate(False)
 
-        self.logo_label = ctk.CTkLabel(
+        # App title in header
+        self.header_title = ctk.CTkLabel(
+            self.header_frame,
+            text="SAPIENT",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color="white"
+        )
+        self.header_title.pack(side="left", padx=30)
+
+        # Theme toggle button
+        self.theme_toggle = ctk.CTkButton(
+            self.header_frame,
+            text="☀️🌙",
+            width=50,
+            height=35,
+            fg_color="#FDD835",
+            hover_color="#F9A825",
+            command=self.toggle_theme
+        )
+        self.theme_toggle.pack(side="right", padx=10)
+
+        # Create left sidebar
+        self.sidebar_frame = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#F5F5F5")
+        self.sidebar_frame.grid(row=1, column=0, sticky="nsew")
+        self.sidebar_frame.grid_propagate(False)
+
+        # Sidebar buttons
+        button_config = {
+            "width": 180,
+            "height": 45,
+            "corner_radius": 10,
+            "font": ctk.CTkFont(size=14),
+            "anchor": "w",
+            "text_color": "black"
+        }
+
+        self.documents_button = ctk.CTkButton(
             self.sidebar_frame,
-            text="Sapient",
-            font=ctk.CTkFont(size=20, weight="bold")
+            text="📄  Document Manager",
+            fg_color="#0088FF",
+            command=self.open_notepad,
+            **button_config
         )
-        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+        self.documents_button.pack(padx=20, pady=(30, 10))
 
-        # Home button (to return to main view)
-        self.home_button = ctk.CTkButton(
+        self.pomodoro_button = ctk.CTkButton(
             self.sidebar_frame,
-            text="🏠 Home",
-            command=self.show_home
+            text="🕐  Focus Timer",
+            fg_color="#4CABFF",
+            command=self.open_timer,
+            **button_config
         )
-        self.home_button.grid(row=1, column=0, padx=20, pady=10)
+        self.pomodoro_button.pack(padx=20, pady=10)
 
-        self.notepad_button = ctk.CTkButton(
+        self.todo_button = ctk.CTkButton(
             self.sidebar_frame,
-            text="📄 Documents",
-            command=self.open_notepad
+            text="📋  To do list",
+            fg_color="#8AC9FF",
+            command=self.open_to_do,
+            **button_config
         )
-        self.notepad_button.grid(row=2, column=0, padx=20, pady=10)
+        self.todo_button.pack(padx=20, pady=10)
 
-        self.timer_button = ctk.CTkButton(
+        # Settings button at bottom
+        self.settings_button = ctk.CTkButton(
             self.sidebar_frame,
-            text="⏱️ Pomodoro",
-            command=self.open_timer
+            text="⚙️",
+            width=50,
+            height=50,
+            corner_radius=25,
+            fg_color="transparent",
+            hover_color="#E0E0E0",
+            text_color="gray",
+            font=ctk.CTkFont(size=20),
+            command=self.open_settings
         )
-        self.timer_button.grid(row=3, column=0, padx=20, pady=10)
+        self.settings_button.pack(side="bottom", pady=30)
 
-        self.to_do_list_button = ctk.CTkButton(
-            self.sidebar_frame,
-            text="✓ To-do List",
-            command=self.open_to_do
-        )
-        self.to_do_list_button.grid(row=4, column=0, padx=20, pady=10)
-
-        self.appearance_mode_label = ctk.CTkLabel(
-            self.sidebar_frame,
-            text="Appearance Mode:",
-            anchor="w"
-        )
-        self.appearance_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0))
-
-        self.appearance_mode_optionemenu = ctk.CTkOptionMenu(
-            self.sidebar_frame,
-            values=["Light", "Dark", "System"],
-            command=self.change_appearance_mode_event
-        )
-        self.appearance_mode_optionemenu.grid(row=6, column=0, padx=20, pady=(10, 10))
-
-        self.scaling_label = ctk.CTkLabel(
-            self.sidebar_frame,
-            text="UI Scaling:",
-            anchor="w"
-        )
-        self.scaling_label.grid(row=7, column=0, padx=20, pady=(10, 0))
-
-        self.scaling_optionemenu = ctk.CTkOptionMenu(
-            self.sidebar_frame,
-            values=["80%", "90%", "100%", "110%", "120%"],
-            command=self.change_scaling_event
-        )
-        self.scaling_optionemenu.grid(row=8, column=0, padx=20, pady=(10, 20))
-
-        # create main content area
-        self.main_content_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.main_content_frame.grid(
-            row=0, column=1, rowspan=3, columnspan=2,
-            padx=20, pady=20, sticky="nsew"
-        )
-
+        # Create main content area
+        self.main_content_frame = ctk.CTkFrame(self, fg_color="#FAF3E0", corner_radius=0)
+        self.main_content_frame.grid(row=1, column=1, sticky="nsew", padx=0, pady=0)
+        
         # Configure main content grid
         self.main_content_frame.grid_columnconfigure(0, weight=1)
         self.main_content_frame.grid_rowconfigure(0, weight=1)
 
-        # Create calendar preview frame (far right)
-        self.calendar_frame = ctk.CTkFrame(self, width=250, corner_radius=10)
-        self.calendar_frame.grid(
-            row=0, column=3, rowspan=3,
-            padx=(0, 20), pady=20, sticky="nsew"
+        # Show documents view by default
+        self.show_documents_home()
+        
+        # Bind cleanup on close
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.set_theme_colors(self.theme_colors)
+
+    def load_usage_data(self):
+        """Load total usage time from file"""
+        if self.usage_file.exists():
+            try:
+                with open(self.usage_file, 'r') as f:
+                    data = json.load(f)
+                    return data.get('total_seconds', 0)
+            except:
+                return 0
+        return 0
+
+    def save_usage_data(self):
+        """Save total usage time to file"""
+        try:
+            with open(self.usage_file, 'w') as f:
+                json.dump({'total_seconds': self.total_usage_seconds}, f)
+        except Exception as e:
+            print(f"Error saving usage data: {e}")
+
+    def start_usage_tracking(self):
+        """Start tracking app usage time"""
+        self.update_usage_time()
+
+    def update_usage_time(self):
+        """Update usage counter every second"""
+        # Calculate session time
+        session_seconds = (datetime.now() - self.start_time).total_seconds()
+        total_seconds = self.total_usage_seconds + session_seconds
+        
+        # Convert to hours and minutes
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        
+        # Update display if usage card exists
+        if hasattr(self, 'usage_hours_label'):
+            self.usage_hours_label.configure(text=f"{hours}h {minutes}m")
+        
+        # Save every 60 seconds
+        if int(session_seconds) % 60 == 0 and int(session_seconds) > 0:
+            self.total_usage_seconds = int(total_seconds)
+            self.save_usage_data()
+        
+        # Schedule next update
+        self.usage_timer = self.after(1000, self.update_usage_time)
+
+    def on_closing(self):
+        """Handle window closing - save usage data"""
+        # Save final usage time
+        session_seconds = (datetime.now() - self.start_time).total_seconds()
+        self.total_usage_seconds = int(self.total_usage_seconds + session_seconds)
+        self.save_usage_data()
+        
+        # Cancel timer
+        if self.usage_timer:
+            self.after_cancel(self.usage_timer)
+        
+        # Close window
+        self.destroy()
+
+    def open_settings(self):
+        """Open settings dialog"""
+        settings_window = ctk.CTkToplevel(self)
+        settings_window.title("Settings")
+        settings_window.geometry("400x300")
+        
+        label = ctk.CTkLabel(
+            settings_window,
+            text="Settings",
+            font=ctk.CTkFont(size=20, weight="bold")
         )
-        self.calendar_frame.grid_propagate(False)
-
-        # Calendar frame title
-        self.calendar_title = ctk.CTkLabel(
-            self.calendar_frame,
-            text="Quick Stats",
-            font=ctk.CTkFont(size=16, weight="bold")
-        )
-        self.calendar_title.pack(padx=20, pady=(20, 10))
-
-        # Calendar content placeholder
-        self.calendar_content = ctk.CTkTextbox(self.calendar_frame, wrap="word")
-        self.calendar_content.pack(padx=20, pady=(0, 20), fill="both", expand=True)
-        self.update_calendar_content()
-
-        # Show home view by default
-        self.show_home()
+        label.pack(pady=20)
 
     def clear_main_content(self):
         """Clear all widgets from main content frame"""
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
 
-    def update_calendar_content(self):
-        """Update the sidebar stats/calendar"""
-        self.calendar_content.configure(state="normal")
-        self.calendar_content.delete("1.0", "end")
-
-        content = f"Current View: {self.current_view.title()}\n\n"
-        content += "📊 Today's Progress:\n"
-        content += "• Pomodoros: 0\n"
-        content += "• Tasks Done: 0\n"
-        content += "• Study Time: 0h\n\n"
-        content += "💡 Tip: Start with\nyour most important\ntask first!"
-
-        self.calendar_content.insert("1.0", content)
-        self.calendar_content.configure(state="disabled")
-
-    def show_home(self):
-        """Show the home/welcome screen"""
-        self.current_view = "home"
+    def show_documents_home(self):
+        """Show the documents home screen with calendar and tasks"""
+        self.current_view = "documents"
         self.clear_main_content()
-        self.update_calendar_content()
 
-        # Create welcome content
-        welcome_frame = ctk.CTkFrame(self.main_content_frame)
-        welcome_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        # Create container for content
+        content_frame = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        content_frame.pack(fill="both", expand=True, padx=30, pady=20)
 
-        # Title
-        title = ctk.CTkLabel(
-            welcome_frame,
-            text="Lorem Ipsum",
-            font=ctk.CTkFont(size=32, weight="bold")
+        # Search bar at top
+        search_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        search_frame.pack(fill="x", pady=(0, 20))
+
+        search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="search",
+            height=40,
+            font=ctk.CTkFont(size=14),
+            fg_color=self.theme_colors["search_bar_bg"],
+            border_width= 1
         )
-        title.pack(pady=(40, 10))
+        search_entry.pack(side="left", fill="x", expand=True)
 
-        # Feature cards frame
-        cards_frame = ctk.CTkFrame(welcome_frame, fg_color="transparent")
-        cards_frame.pack(fill="both", expand=True, padx=40)
-
-        # Configure grid for cards
-        cards_frame.grid_columnconfigure((0, 1, 2), weight=1)
-
-        # Card 1: Documents
-        self.create_feature_card(
-            cards_frame,
-            "📄 Documents",
-            "Read PDFs and take\nlinked notes",
-            0, 0,
-            self.open_notepad
+        search_button = ctk.CTkButton(
+            search_frame,
+            text="🔍",
+            width=40,
+            height=40,
+            fg_color="transparent",
+            hover_color="#E0E0E0"
         )
+        search_button.pack(side="right", padx=(10, 0))
 
-        # Card 2: Pomodoro
-        self.create_feature_card(
-            cards_frame,
-            "⏱️ Pomodoro Timer",
-            "Focus with work-rest\ncycles",
-            0, 1,
-            self.open_timer
+        # Main content area with calendar and tasks
+        content_grid = ctk.CTkFrame(content_frame, fg_color="transparent")
+        content_grid.pack(fill="both", expand=True)
+        content_grid.grid_columnconfigure(0, weight=3)  # Calendar column narrower
+        content_grid.grid_columnconfigure(1, weight=3)  # Right side wider
+        content_grid.grid_rowconfigure(0, weight=1)
+
+        # Left side - Calendar and Task card stacked
+        left_panel = ctk.CTkFrame(content_grid, fg_color="transparent")
+        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_panel.grid_rowconfigure(0, weight=10)
+        left_panel.grid_rowconfigure(1, weight=5)
+        left_panel.grid_columnconfigure(0, weight=10)
+
+        # Calendar (thinner)
+        calendar_card = ctk.CTkFrame(left_panel,
+                                      fg_color=self.theme_colors["calendar_bg"],
+                                         corner_radius=15)
+        calendar_card.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
+        self.create_calendar(calendar_card)
+
+        # Task preview card under calendar
+        task_card = ctk.CTkFrame(left_panel,
+                                  fg_color=self.theme_colors["task_card_bg_1"],
+                                    corner_radius=15)
+        task_card.grid(row=1, column=0, sticky="nsew")
+
+        task_date = ctk.CTkLabel(
+            task_card,
+            text="date here when we implement closest date logic",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=self.theme_colors["text_color"]
         )
+        task_date.pack(anchor="w", padx=20, pady=(20, 10))
 
-        # Card 3: To-Do
-        self.create_feature_card(
-            cards_frame,
-            "✓ To-Do List",
-            "Track tasks and\nprogress",
-            0, 2,
-            self.open_to_do
+        tasks = ["this is a task", "this is also a task",]
+        for task in tasks:
+            task_label = ctk.CTkLabel(
+                task_card,
+                text=f"• {task}",
+                font=ctk.CTkFont(size=12),
+                anchor="w",
+                text_color=self.theme_colors["text_color"]
+            )
+            task_label.pack(anchor="w", padx=20, pady=2)
+
+        # Right side - Recent files
+        right_panel = ctk.CTkFrame(content_grid,
+                                    fg_color="transparent",)
+        right_panel.grid(row=0, column=2, sticky="nsew", padx=(20, 0))
+        right_panel.grid_rowconfigure(0, weight=1)
+        right_panel.grid_rowconfigure(1, weight=0)
+        right_panel.grid_columnconfigure(0, weight=5)
+
+        # Recent files card (main area)
+        files_card = ctk.CTkFrame(right_panel,
+                                   fg_color="transparent",
+                                     corner_radius=15)
+        files_card.grid(row=0, column=0, sticky="nsew", pady=(0, 5))
+
+        files_title = ctk.CTkLabel(
+            files_card,
+            text="Recent files",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color=self.theme_colors["recent_files_fg"],
+            corner_radius=8,
+            width=120,
+            height=30
         )
+        files_title.pack(padx=100,pady=20)
 
-    def create_feature_card(self, parent, title, description, row, col, command):
-        """Helper to create feature cards"""
-        card = ctk.CTkFrame(parent, corner_radius=10)
-        card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        # App Usage card in bottom right corner
+        usage_card = ctk.CTkFrame(right_panel,
+                                   fg_color=self.theme_colors["usage_card_bg"],
+                                     corner_radius=15,
+                                       height=25)
+        usage_card.grid(row=1, column=0, sticky="ew")
+        usage_card.grid_propagate(False)
 
-        card_title = ctk.CTkLabel(
-            card,
-            text=title,
-            font=ctk.CTkFont(size=18, weight="bold")
+        # Calculate current usage
+        session_seconds = (datetime.now() - self.start_time).total_seconds()
+        total_seconds = self.total_usage_seconds + session_seconds
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+
+        self.usage_hours_label = ctk.CTkLabel(
+            usage_card,
+            text=f"{hours}h {minutes}m",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=self.theme_colors["text_color"]
         )
-        card_title.pack(pady=(20, 10))
+        self.usage_hours_label.pack(pady=(0, 10))
 
-        card_desc = ctk.CTkLabel(
-            card,
-            text=description,
-            font=ctk.CTkFont(size=12)
+    def create_calendar(self, parent):
+        """Create a calendar widget"""
+        # Calendar header
+        cal_header = ctk.CTkFrame(parent, fg_color="transparent")
+        cal_header.pack(fill="x", padx=20, pady=(20, 10))
+
+        now = datetime.now()
+        month_label = ctk.CTkLabel(
+            cal_header,
+            text=f"{now.strftime('%B %Y')}",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.theme_colors["text_color"]
         )
-        card_desc.pack(pady=(0, 20))
+        month_label.pack(side="left")
 
-        card_button = ctk.CTkButton(
-            card,
-            text="Open",
-            command=command,
-            width=100
+        nav_frame = ctk.CTkFrame(cal_header, fg_color="transparent")
+        nav_frame.pack(side="right")
+
+        prev_btn = ctk.CTkButton(
+            nav_frame,
+            text="<",
+            width=30,
+            height=30,
+            fg_color="transparent",
+            hover_color="#E0E0E0",
+            text_color="gray"
         )
-        card_button.pack(pady=(0, 20))
+        prev_btn.pack(side="left", padx=2)
 
-    def change_appearance_mode_event(self, new_appearance_mode: str):
-        ctk.set_appearance_mode(new_appearance_mode)
+        next_btn = ctk.CTkButton(
+            nav_frame,
+            text=">",
+            width=30,
+            height=30,
+            fg_color="transparent",
+            hover_color="#E0E0E0",
+            text_color="gray"
+        )
+        next_btn.pack(side="left", padx=2)
 
-    def change_scaling_event(self, new_scaling: str):
-        new_scaling_float = int(new_scaling.replace("%", "")) / 100
-        ctk.set_widget_scaling(new_scaling_float)
+        # Calendar grid
+        cal_grid = ctk.CTkFrame(parent, fg_color="transparent")
+        cal_grid.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        # Day headers
+        days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+        for i, day in enumerate(days):
+            day_label = ctk.CTkLabel(
+                cal_grid,
+                text=day,
+                font=ctk.CTkFont(size=10),
+                text_color="gray",
+                width=40
+            )
+            day_label.grid(row=0, column=i, padx=2, pady=5)
+
+        # Calendar days
+        cal_obj = calendar.monthcalendar(now.year, now.month)
+        for week_num, week in enumerate(cal_obj):
+            for day_num, day in enumerate(week):
+                if day == 0:
+                    continue
+                
+                is_today = day == now.day
+                
+                # Use theme colors for today/range highlight
+                today_bg = "#2196F3" if ctk.get_appearance_mode() == "Light" else self.theme_colors["document_button_fg"] # Use a theme color for today
+                range_bg = "#E3F2FD" if ctk.get_appearance_mode() == "Light" else self.theme_colors["task_card_bg_2"]
+                
+                fg_color = today_bg if is_today else "transparent"
+                text_color = "white" if is_today else self.theme_colors["text_color"]
+                
+                day_btn = ctk.CTkButton(
+                    cal_grid,
+                    text=str(day),
+                    width=40,
+                    height=35,
+                    fg_color=fg_color,
+                    hover_color=range_bg, # Use range color for hover
+                    text_color=text_color,
+                    corner_radius=8,
+                    font=ctk.CTkFont(size=12)
+                )
+                day_btn.grid(row=week_num + 1, column=day_num, padx=2, pady=2)
+    def set_theme_colors(self,colors):
+        self.theme_colors = colors
+
+        # Update Header Color
+        self.header_frame.configure(fg_color=colors["header_bg"])
+        self.sidebar_frame.configure(
+            fg_color=colors["sidebar_bg"],)
+        self.main_content_frame.configure(fg_color=colors["main_bg"])
+
+        self.documents_button.configure(fg_color=colors["document_button_fg"],
+                                        text_color=colors["text_color"])
+        self.pomodoro_button.configure(fg_color=colors["pomodoro_button_fg"],
+                                        text_color=colors["text_color"])
+        self.todo_button.configure(fg_color=colors["todo_button_fg"],
+                                        text_color=colors["text_color"])
+
+        if ctk.get_appearance_mode() == "Light":
+            self.theme_toggle.configure(fg_color="#FDD835", hover_color="#F9A825")
+        else:
+            self.theme_toggle.configure(fg_color="#424242", hover_color="#616161")
+        if self.current_view == "documents":
+            self.show_documents_home()
+
+    def toggle_theme(self):
+        """Toggle between light and dark mode"""
+        current = ctk.get_appearance_mode()
+        if current == "Light":
+            ctk.set_appearance_mode("Dark")
+            self.set_theme_colors(self.DARK_THEME)
+        else:
+            ctk.set_appearance_mode("Light")
+            self.set_theme_colors(self.LIGHT_THEME)
 
     def open_notepad(self):
         """Load notepad applet into main content area"""
         print("Opening Documents...")
         self.current_view = "documents"
-        self.clear_main_content()
-        self.update_calendar_content()
-
+        
         if NotepadApplet:
+            self.clear_main_content()
             self.current_applet = NotepadApplet(self.main_content_frame)
         else:
-            # Placeholder when applet not ready
-            placeholder = ctk.CTkLabel(
-                self.main_content_frame,
-                text="📄 Documents Module\n\nComing Soon...",
-                font=ctk.CTkFont(size=24)
-            )
-            placeholder.pack(expand=True)
+            self.show_documents_home()
 
     def open_timer(self):
         """Load pomodoro applet into main content area"""
         print("Opening Pomodoro Timer...")
         self.current_view = "pomodoro"
         self.clear_main_content()
-        self.update_calendar_content()
 
         if PomodoroApplet:
             self.current_applet = PomodoroApplet(self.main_content_frame)
         else:
-            # Placeholder when applet not ready
             placeholder = ctk.CTkLabel(
                 self.main_content_frame,
                 text="⏱️ Pomodoro Timer\n\nComing Soon...",
@@ -291,12 +537,10 @@ class App(ctk.CTk):
         print("Opening To-Do List...")
         self.current_view = "todo"
         self.clear_main_content()
-        self.update_calendar_content()
 
         if TodoApplet:
             self.current_applet = TodoApplet(self.main_content_frame)
         else:
-            # Placeholder when applet not ready
             placeholder = ctk.CTkLabel(
                 self.main_content_frame,
                 text="✓ To-Do List\n\nComing Soon...",
