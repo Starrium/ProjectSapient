@@ -78,6 +78,11 @@ class App(ctk.CTk):
         self.usage_timer = None
         self.start_usage_tracking()
 
+        # Calendar state
+        self.cal_view_date = datetime.now()
+        self.cal_year = self.cal_view_date.year
+        self.cal_month = self.cal_view_date.month
+
         # configure window
         self.title("Sapient")
         self.geometry(f"{1400}x{800}")
@@ -221,7 +226,7 @@ class App(ctk.CTk):
         
         # Update display if usage card exists
         if hasattr(self, 'usage_hours_label'):
-            self.usage_hours_label.configure(text=f"{hours}h {minutes}m")
+            self.usage_hours_label.configure(text=f"Use time: {hours}h {minutes}m")
         
         # Save every 60 seconds
         if int(session_seconds) % 60 == 0 and int(session_seconds) > 0:
@@ -388,22 +393,40 @@ class App(ctk.CTk):
             text_color=self.theme_colors["text_color"]
         )
         self.usage_hours_label.pack(pady=(0, 10))
+    
+    def change_month(self, step):
+        self.cal_month += step
+
+        if self.cal_month > 12:
+            self.cal_month = 1
+            self.cal_year += 1
+        elif self.cal_month < 1:
+            self.cal_month = 12
+            self.cal_year -= 1
+
+        if hasattr(self, 'calendar_container'): # Refresh calendar display
+            self.create_calendar(self.calendar_container)
 
     def create_calendar(self, parent):
         """Create a calendar widget"""
+        # Clear previous calendar if exists
+        self.calendar_container = parent
+        for widget in parent.winfo_children():
+            widget.destroy()
+
         # Calendar header
         cal_header = ctk.CTkFrame(parent, fg_color="transparent")
         cal_header.pack(fill="x", padx=20, pady=(20, 10))
 
-        now = datetime.now()
+        # State variables
+        view_date = datetime(self.cal_year, self.cal_month, 1)
         month_label = ctk.CTkLabel(
             cal_header,
-            text=f"{now.strftime('%B %Y')}",
+            text=f"{view_date.strftime('%B %Y')}",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=self.theme_colors["text_color"]
         )
         month_label.pack(side="left")
-
         nav_frame = ctk.CTkFrame(cal_header, fg_color="transparent")
         nav_frame.pack(side="right")
 
@@ -414,7 +437,8 @@ class App(ctk.CTk):
             height=30,
             fg_color="transparent",
             hover_color="#E0E0E0",
-            text_color="gray"
+            text_color="gray",
+            command=lambda: self.change_month(-1)
         )
         prev_btn.pack(side="left", padx=2)
 
@@ -425,13 +449,19 @@ class App(ctk.CTk):
             height=30,
             fg_color="transparent",
             hover_color="#E0E0E0",
-            text_color="gray"
+            text_color="gray",
+            command=lambda: self.change_month(1)
         )
         next_btn.pack(side="left", padx=2)
 
         # Calendar grid
         cal_grid = ctk.CTkFrame(parent, fg_color="transparent")
         cal_grid.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        for i in range(7):
+            cal_grid.grid_columnconfigure(i, weight=1)
+        for i in range(1,7):
+            cal_grid.grid_rowconfigure(i, weight=1)
 
         # Day headers
         days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
@@ -446,13 +476,16 @@ class App(ctk.CTk):
             day_label.grid(row=0, column=i, padx=2, pady=5)
 
         # Calendar days
-        cal_obj = calendar.monthcalendar(now.year, now.month)
+        cal_obj = calendar.monthcalendar(self.cal_year, self.cal_month)
+        real_now = datetime.now()
         for week_num, week in enumerate(cal_obj):
             for day_num, day in enumerate(week):
                 if day == 0:
                     continue
                 
-                is_today = day == now.day
+                is_today = (day == real_now.day and
+                            self.cal_month == real_now.month and
+                            self.cal_year == real_now.year)
                 
                 # Use theme colors for today/range highlight
                 today_bg = "#2196F3" if ctk.get_appearance_mode() == "Light" else self.theme_colors["document_button_fg"] # Use a theme color for today
@@ -464,8 +497,8 @@ class App(ctk.CTk):
                 day_btn = ctk.CTkButton(
                     cal_grid,
                     text=str(day),
-                    width=40,
-                    height=35,
+                    #width=40, # temporarily disable fixed size for better scaling
+                    #height=35,
                     fg_color=fg_color,
                     hover_color=range_bg, # Use range color for hover
                     text_color=text_color,
@@ -473,6 +506,7 @@ class App(ctk.CTk):
                     font=ctk.CTkFont(size=12)
                 )
                 day_btn.grid(row=week_num + 1, column=day_num, padx=2, pady=2)
+            day_btn.grid(row=week_num + 1, column=day_num, padx=2, pady=2,sticky="nsew")
     def set_theme_colors(self,colors):
         self.theme_colors = colors
 
