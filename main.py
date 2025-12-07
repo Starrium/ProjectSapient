@@ -99,11 +99,14 @@ class App(ctk.CTk):
         self.header_frame.grid_propagate(False)
 
         # App title in header
-        self.header_title = ctk.CTkLabel(
+        self.header_title = ctk.CTkButton(
             self.header_frame,
             text="SAPIENT",
             font=ctk.CTkFont(size=20, weight="bold"),
-            text_color="white"
+            fg_color="transparent",
+            hover_color=self.theme_colors["header_bg"],
+            text_color="white",
+            command=self.show_documents_home
         )
         self.header_title.pack(side="left", padx=30)
 
@@ -544,12 +547,17 @@ class App(ctk.CTk):
         """Load notepad applet into main content area"""
         print("Opening Documents...")
         self.current_view = "documents"
-        
+        self.clear_main_content()
+
         if NotepadApplet:
-            self.clear_main_content()
             self.current_applet = NotepadApplet(self.main_content_frame)
         else:
-            self.show_documents_home()
+            placeholder = ctk.CTkLabel(
+                self.main_content_frame,
+                text="document? nah wait for it lol",
+                font=ctk.CTkFont(size=24)
+            )
+            placeholder.pack(expand=True)
 
     def open_timer(self):
         """Load pomodoro applet into main content area"""
@@ -562,7 +570,7 @@ class App(ctk.CTk):
         else:
             placeholder = ctk.CTkLabel(
                 self.main_content_frame,
-                text="⏱️ Pomodoro Timer\n\nComing Soon...",
+                text="just wait, we have like 4 weeks for this lmfao",
                 font=ctk.CTkFont(size=24)
             )
             placeholder.pack(expand=True)
