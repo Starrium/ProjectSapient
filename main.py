@@ -71,7 +71,8 @@ class App(ctk.CTk):
         self.current_view = "documents"
         
         # Usage tracking
-        self.usage_file = Path("app_usage.json")
+        app_data_dir = self.get_app_data_path()
+        self.usage_file = app_data_dir / "app_usage.json"
         self.start_time = datetime.now()
         self.total_usage_seconds = self.load_usage_data()
         self.usage_timer = None
@@ -547,6 +548,21 @@ class App(ctk.CTk):
                 font=ctk.CTkFont(size=24)
             )
             placeholder.pack(expand=True)
+    def get_app_data_path(self):
+        app_name = "sapient"
+        
+        if os.name == 'nt': # Windows
+            data_dir = Path(os.getenv('LOCALAPPDATA')) / app_name
+        elif os.name == 'posix': # macOS/Linux
+            if sys.platform == 'darwin': # macOS
+                data_dir = Path.home() / 'Library' / 'Application Support' / app_name
+            else: # Linux
+                data_dir = Path(os.getenv('XDG_CONFIG_HOME', Path.home() / '.config')) / app_name
+        else: # Fallback
+            data_dir = Path.home() / f".{app_name.lower()}"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        
+        return data_dir
 
 
 if __name__ == "__main__":
