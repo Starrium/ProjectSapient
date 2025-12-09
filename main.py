@@ -55,8 +55,8 @@ class App(ctk.CTk):
             "document_button_fg": "#470A70",
             "pomodoro_button_fg": "#5D3677",
             "todo_button_fg": "#665075",
-            "calendar_bg": "#342727",
-            "search_bar_bg": "#B46B54",
+            "calendar_bg": "#FFFFFF",
+            "search_bar_bg": "#E7EBEA",
             "usage_card_bg": "#4F1C51",
             "task_card_bg_1": "#570190",
             "task_card_bg_2": "#621F8E",
@@ -427,7 +427,7 @@ class App(ctk.CTk):
             cal_header,
             text=f"{view_date.strftime('%B %Y')}",
             font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=self.theme_colors["text_color"]
+            text_color="black"
         )
         month_label.pack(side="left")
         nav_frame = ctk.CTkFrame(cal_header, fg_color="transparent")
@@ -495,7 +495,7 @@ class App(ctk.CTk):
                 range_bg = "#E3F2FD" if ctk.get_appearance_mode() == "Light" else self.theme_colors["task_card_bg_2"]
                 
                 fg_color = today_bg if is_today else "transparent"
-                text_color = "white" if is_today else self.theme_colors["text_color"]
+                text_color = "white" if is_today else "black"
                 
                 day_btn = ctk.CTkButton(
                     cal_grid,
