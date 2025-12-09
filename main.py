@@ -94,8 +94,8 @@ class App(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)     # Content
 
         # Create header bar
-        self.header_frame = ctk.CTkFrame(self, height=60, fg_color="#2196F3", corner_radius=0)
-        self.header_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.header_frame = ctk.CTkFrame(self, height=50, fg_color="#2196F3", corner_radius=0)
+        self.header_frame.grid(row=0, column=0, columnspan=2, sticky="sew")
         self.header_frame.grid_propagate(False)
 
         # App title in header
@@ -121,6 +121,26 @@ class App(ctk.CTk):
             command=self.toggle_theme
         )
         self.theme_toggle.pack(side="right", padx=10)
+        # App usage card in header
+        self.usage_card = ctk.CTkFrame(self.header_frame,
+                                      fg_color="#F3DEDE",
+                                         corner_radius=15,
+                                        height=25)
+        self.usage_card.pack(side="right", padx=20)
+        self.usage_card.pack_propagate(False)
+        # Calculate current usage
+        session_seconds = (datetime.now() - self.start_time).total_seconds()
+        total_seconds = self.total_usage_seconds + session_seconds
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+
+        self.usage_hours_label = ctk.CTkLabel(
+            self.usage_card,
+            text=f"Use Time: {hours}h {minutes}m",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=self.theme_colors["text_color"]
+        )
+        self.usage_hours_label.pack()
 
         # Create left sidebar
         self.sidebar_frame = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#F5F5F5")
@@ -374,28 +394,6 @@ class App(ctk.CTk):
             height=30
         )
         files_title.pack(padx=100,pady=20)
-
-        # App Usage card in bottom right corner
-        usage_card = ctk.CTkFrame(right_panel,
-                                   fg_color=self.theme_colors["usage_card_bg"],
-                                     corner_radius=15,
-                                       height=25)
-        usage_card.grid(row=1, column=0, sticky="ew")
-        usage_card.grid_propagate(False)
-
-        # Calculate current usage
-        session_seconds = (datetime.now() - self.start_time).total_seconds()
-        total_seconds = self.total_usage_seconds + session_seconds
-        hours = int(total_seconds // 3600)
-        minutes = int((total_seconds % 3600) // 60)
-
-        self.usage_hours_label = ctk.CTkLabel(
-            usage_card,
-            text=f"{hours}h {minutes}m",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            text_color=self.theme_colors["text_color"]
-        )
-        self.usage_hours_label.pack(pady=(0, 10))
     
     def change_month(self, step):
         self.cal_month += step
@@ -518,6 +516,8 @@ class App(ctk.CTk):
         self.sidebar_frame.configure(
             fg_color=colors["sidebar_bg"],)
         self.main_content_frame.configure(fg_color=colors["main_bg"])
+        self.usage_card.configure(fg_color=colors["usage_card_bg"])
+        self.usage_hours_label.configure(text_color=colors["text_color"])
 
         self.documents_button.configure(fg_color=colors["document_button_fg"],
                                         text_color=colors["text_color"])
