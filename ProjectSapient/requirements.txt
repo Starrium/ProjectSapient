@@ -1,0 +1,14 @@
+# Sapient App Dependencies
+# Install with: pip install -r requirements.txt
+
+# GUI Framework
+customtkinter>=5.2.0
+
+# Calendar Widget
+tkcalendar>=1.6.1
+
+# Note: tkinter comes built-in with Python
+# If you're on Linux and tkinter is missing, install it with:
+# Ubuntu/Debian: sudo apt-get install python3-tk
+# Fedora: sudo dnf install python3-tkinter
+# Arch: sudo pacman -S tk
