@@ -272,12 +272,14 @@ class App(ctk.CTk):
                 return 0
         return 0
 
-    def save_usage_data(self):
+    def save_usage_data(self,current_total=None):
         """Save total usage time to file with current date"""
         try:
             today = datetime.now().strftime("%Y-%m-%d")
+            value_to_save = current_total if current_total is not None else self.total_usage_seconds
+            
             with open(self.usage_file, "w") as f:
-                json.dump({"total_seconds": self.total_usage_seconds, "date": today}, f)
+                json.dump({"total_seconds": int(value_to_save), "date": today}, f)
         except Exception as e:
             print(f"Error saving usage data: {e}")
 
@@ -289,11 +291,11 @@ class App(ctk.CTk):
         """Update usage counter every second"""
         # Calculate session time
         session_seconds = (datetime.now() - self.start_time).total_seconds()
-        total_seconds = self.total_usage_seconds + session_seconds
+        real_time_total = self.total_usage_seconds + session_seconds
 
         # Convert to hours and minutes
-        hours = int(total_seconds // 3600)
-        minutes = int((total_seconds % 3600) // 60)
+        hours = int(real_time_total // 3600)
+        minutes = int((real_time_total % 3600) // 60)
 
         # Update display if usage card exists
         if hasattr(self, "usage_hours_label"):
@@ -301,18 +303,19 @@ class App(ctk.CTk):
 
         # Save every 60 seconds
         if int(session_seconds) % 60 == 0 and int(session_seconds) > 0:
-            self.total_usage_seconds = int(total_seconds)
-            self.save_usage_data()
+            self.save_usage_data(current_total=real_time_total)
 
         # Schedule next update
         self.usage_timer = self.after(1000, self.update_usage_time)
 
     def on_closing(self):
         """Handle window closing - save usage data"""
-        # Save final usage time
+        # Calculate final total
         session_seconds = (datetime.now() - self.start_time).total_seconds()
-        self.total_usage_seconds = int(self.total_usage_seconds + session_seconds)
-        self.save_usage_data()
+        final_total = self.total_usage_seconds + session_seconds
+        
+        # Save the final calculated sum
+        self.save_usage_data(current_total=final_total)
 
         # Cancel timer
         if self.usage_timer:
