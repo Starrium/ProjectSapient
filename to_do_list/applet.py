@@ -1,4 +1,7 @@
 import customtkinter as ctk
+import calendar
+import tkinter as tk
+from tkinter import messagebox
 from datetime import datetime, timedelta
 from tkcalendar import DateEntry
 
@@ -9,306 +12,492 @@ except ImportError:
     sys.path.insert(0, '..')
     from task_manager import task_manager
 
+class CalendarPopup(ctk.CTkFrame):
+    def __init__(self, parent, on_select_callback, fg_color="white", text_color="black"):
+        super().__init__(parent, fg_color=fg_color, corner_radius=15, border_width=1, border_color="#E0E0E0")
+        self.on_select = on_select_callback
+        self.fg_color = fg_color
+        self.text_color = text_color
+        
+        self.current_date = datetime.now()
+        self.year = self.current_date.year
+        self.month = self.current_date.month
+        self.selected_date = None
+
+        self.setup_ui()
+        self.update_calendar()
+
+    def setup_ui(self):
+        # Header (Month Year + Nav buttons)
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=10, pady=10)
+
+        self.btn_prev = ctk.CTkButton(header, text="<", width=30, height=30, 
+                                      fg_color="transparent", text_color=self.text_color, hover_color="#E0E0E0",
+                                      command=lambda: self.change_month(-1))
+        self.btn_prev.pack(side="left")
+
+        self.lbl_month = ctk.CTkLabel(header, text="", font=ctk.CTkFont(size=14, weight="bold"), text_color=self.text_color)
+        self.lbl_month.pack(side="left", expand=True)
+
+        self.btn_next = ctk.CTkButton(header, text=">", width=30, height=30, 
+                                      fg_color="transparent", text_color=self.text_color, hover_color="#E0E0E0",
+                                      command=lambda: self.change_month(1))
+        self.btn_next.pack(side="right")
+
+        # Days Grid
+        self.days_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.days_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Weekday headers
+        weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        for i, day in enumerate(weekdays):
+            lbl = ctk.CTkLabel(self.days_frame, text=day, font=ctk.CTkFont(size=12, weight="bold"), text_color="gray", width=30)
+            lbl.grid(row=0, column=i, pady=5)
+
+    def change_month(self, step):
+        self.month += step
+        if self.month > 12:
+            self.month = 1
+            self.year += 1
+        elif self.month < 1:
+            self.month = 12
+            self.year -= 1
+        self.update_calendar()
+
+    def update_calendar(self):
+        # Update Header
+        month_name = calendar.month_name[self.month]
+        self.lbl_month.configure(text=f"{month_name} {self.year}")
+
+        # Clear existing day buttons (skipping the header row)
+        for widget in self.days_frame.winfo_children():
+            if int(widget.grid_info()["row"]) > 0:
+                widget.destroy()
+
+        # Generate days
+        cal = calendar.monthcalendar(self.year, self.month)
+        today = datetime.now()
+
+        for r, week in enumerate(cal):
+            for c, day in enumerate(week):
+                if day == 0:
+                    continue
+
+                # Check if this day is today
+                is_today = (day == today.day and self.month == today.month and self.year == today.year)
+                
+                # Determine colors
+                btn_fg = "transparent"
+                btn_text = self.text_color
+                btn_hover = "#E0E0E0"
+
+                if is_today:
+                    btn_fg = "#2196F3" # Blue highlight for today
+                    btn_text = "white"
+                    btn_hover = "#1976D2"
+
+                btn = ctk.CTkButton(self.days_frame, text=str(day), width=30, height=30,
+                                    fg_color=btn_fg, text_color=btn_text, hover_color=btn_hover,
+                                    corner_radius=15, font=ctk.CTkFont(size=12),
+                                    command=lambda d=day: self.select_day(d))
+                btn.grid(row=r+1, column=c, padx=2, pady=2)
+
+    def select_day(self, day):
+        # Format date string YYYY-MM-DD
+        date_str = f"{self.year}-{self.month:02d}-{day:02d}"
+        self.on_select(date_str)
 
 class TodoApplet:
     def __init__(self, parent):
         self.parent = parent
         self.name = "To-Do List"
         
-        # Create main container
-        self.main_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self.main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        # Get theme colors from appearance mode
+        self.update_theme_colors()
         
-        # Title
-        self.title = ctk.CTkLabel(
-            self.main_frame,
-            text="✓ My Tasks",
-            font=ctk.CTkFont(size=28, weight="bold")
-        )
-        self.title.pack(pady=(0, 20))
+        # Track editing state
+        self.is_editing = False
+        self.editing_task_id = None
         
-        # Stats frame
-        stats_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        stats_frame.pack(fill="x", pady=(0, 15))
+        # Create main container with theme background
+        self.main_frame = ctk.CTkFrame(parent, fg_color=self.colors['bg'])
+        self.main_frame.pack(fill="both", expand=True)
         
-        self.stats_label = ctk.CTkLabel(
-            stats_frame,
-            text="",
-            font=ctk.CTkFont(size=12),
-            text_color="gray"
-        )
-        self.stats_label.pack()
-        
-        # Input frame for new tasks - modern white card style
-        input_frame = ctk.CTkFrame(self.main_frame, fg_color="#FFFFFF", corner_radius=12)
-        input_frame.pack(fill="x", pady=10, padx=5)
-        
-        # Task text input
-        self.task_input = ctk.CTkEntry(
-            input_frame,
-            placeholder_text="Add new task...",
-            height=45,
-            border_width=0,
-            fg_color="transparent",
-            font=ctk.CTkFont(size=14)
-        )
-        self.task_input.pack(side="left", fill="both", expand=True, padx=15, pady=10)
-        self.task_input.bind("<Return>", lambda e: self.add_task())
-        
-        # Date picker button - modern pill style
-        self.selected_date = None
-        self.date_btn = ctk.CTkButton(
-            input_frame,
-            text="📅 Today",
-            command=self.show_date_picker,
-            width=110,
-            height=38,
-            fg_color="#E3F2FD",
-            hover_color="#BBDEFB",
-            text_color="#1565C0",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=19
-        )
-        self.date_btn.pack(side="left", padx=(0, 8), pady=10)
-        
-        # Priority selector - cleaner styling
-        self.priority_var = ctk.StringVar(value="normal")
-        self.priority_menu = ctk.CTkOptionMenu(
-            input_frame,
-            values=["🔵 low", "⚪ normal", "🔴 high"],
-            variable=self.priority_var,
-            width=120,
-            height=38,
-            fg_color="#F5F5F5",
-            button_color="#E0E0E0",
-            button_hover_color="#BDBDBD",
-            text_color="#424242",
-            font=ctk.CTkFont(size=12),
-            corner_radius=19,
-            dropdown_fg_color="#FFFFFF",
-            dropdown_hover_color="#E3F2FD"
-        )
-        self.priority_menu.set("⚪ normal")
-        self.priority_menu.pack(side="left", padx=(0, 8), pady=10)
-        
-        # Add button - vibrant green
-        self.add_button = ctk.CTkButton(
-            input_frame,
-            text="＋",
-            command=self.add_task,
-            width=45,
-            height=38,
-            fg_color="#4CAF50",
-            hover_color="#43A047",
-            font=ctk.CTkFont(size=20, weight="bold"),
-            corner_radius=19
-        )
-        self.add_button.pack(side="left", padx=(0, 10), pady=10)
-        
-        # Search bar
-        search_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        search_frame.pack(fill="x", pady=(10, 5))
-        
-        self.search_var = ctk.StringVar()
-        self.search_entry = ctk.CTkEntry(
-            search_frame,
-            placeholder_text="🔍 Search tasks...",
-            textvariable=self.search_var,
-            height=35,
-            width=250,
-            corner_radius=17,
-            fg_color="#FFFFFF",
-            border_width=1,
-            border_color="#E0E0E0"
-        )
-        self.search_entry.pack(side="left", padx=(0, 10))
-        self.search_var.trace_add("write", lambda *args: self.update_task_display())
-        
-        # Filter buttons
-        filter_frame = ctk.CTkFrame(search_frame, fg_color="transparent")
-        filter_frame.pack(side="left", fill="x", expand=True)
-        
-        self.filter_var = ctk.StringVar(value="all")
-        filters = [("All", "all"), ("Active", "active"), ("Completed", "done"), ("Today", "today")]
-        
-        for text, value in filters:
-            btn = ctk.CTkButton(
-                filter_frame,
-                text=text,
-                command=lambda v=value: self.set_filter(v),
-                width=70,
-                height=30,
-                fg_color="#E0E0E0" if value != "all" else "#2196F3",
-                hover_color="#BDBDBD",
-                text_color="black" if value != "all" else "white",
-                corner_radius=15
-            )
-            btn.pack(side="left", padx=3)
-            setattr(self, f"filter_btn_{value}", btn)
-        
-        # Clear Completed button
-        self.clear_btn = ctk.CTkButton(
-            search_frame,
-            text="🧹 Clear Done",
-            command=self.clear_completed,
-            width=100,
-            height=30,
-            fg_color="#FFEBEE",
-            hover_color="#FFCDD2",
-            text_color="#C62828",
-            corner_radius=15
-        )
-        self.clear_btn.pack(side="right", padx=5)
-        
-        # Tasks container with scroll
-        self.tasks_container = ctk.CTkScrollableFrame(
-            self.main_frame,
-            fg_color="transparent"
-        )
-        self.tasks_container.pack(fill="both", expand=True, pady=10)
-        
-        # Date picker popup (hidden initially)
-        self.date_popup = None
+        # Create layout: main content with two columns
+        self.create_main_content()
         
         self.update_task_display()
-        self.update_stats()
     
-    def show_date_picker(self):
-        """Show date picker popup"""
-        if self.date_popup and self.date_popup.winfo_exists():
-            self.date_popup.destroy()
+    def update_theme_colors(self):
+        """Update colors based on current theme"""
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        
+        if is_dark:
+            self.colors = {
+                'bg': '#493E60',
+                'card_bg': '#4A3B5C',
+                'task_bg': '#B8B3C1',
+                'add_btn_bg': '#B8B3C1',
+                'text_dark': '#000000',
+                'description_text': '#C0BFBF',
+            }
+        else:
+            self.colors = {
+                'bg': '#FAE5D5', 
+                'card_bg': '#C0BFBF',
+                'task_bg': '#FFFFFF', 
+                'add_btn_bg': '#E0E0E0', 
+                'text_dark': '#2D1B4E',
+                'description_text': '#D9D9D9',
+            }
+    
+    def create_main_content(self):
+        """Create main content area"""
+        # Content area with two columns
+        self.content_area = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.content_area.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Left column - Task list
+        self.left_column = ctk.CTkFrame(self.content_area, fg_color=self.colors['card_bg'], corner_radius=25)
+        self.left_column.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        # Tasks scrollable area
+        self.tasks_container = ctk.CTkScrollableFrame(
+            self.left_column,
+            fg_color="transparent"
+        )
+        self.tasks_container.pack(fill="both", expand=True, padx=15, pady=15)
+        
+        # Right column - placeholder for edit panel (created on demand)
+        self.right_column = None
+    
+    def show_add_panel(self):
+        """Show the add/edit panel on the right"""
+        self.is_editing = True
+        
+        # Create right column if it doesn't exist
+        if self.right_column is None or not self.right_column.winfo_exists():
+            self.right_column = ctk.CTkFrame(self.content_area, fg_color=self.colors['card_bg'], corner_radius=25, width=350)
+            self.right_column.pack(side="right", fill="y", padx=(10, 0))
+            self.right_column.pack_propagate(False)
+            self.create_task_input_panel(self.right_column)
+        
+        # Clear inputs
+        self.clear_input()
+        if hasattr(self, 'delete_btn'):
+            self.delete_btn.pack_forget() 
+            
+        self.editing_task_id = None # Reset ID for new task
+    
+    def hide_add_panel(self):
+        """Hide the add/edit panel"""
+        self.is_editing = False
+        self.editing_task_id = None
+        
+        if self.right_column and self.right_column.winfo_exists():
+            self.right_column.destroy()
+            self.right_column = None
+    
+    def create_task_input_panel(self, parent):
+        """Create task input/edit panel"""
+        header_frame = ctk.CTkFrame(parent, fg_color="transparent", height=40)
+        header_frame.pack(fill="x", padx=10, pady=(10, 5))
+        # Close button (Moved to Top Right)
+        close_btn = ctk.CTkButton(
+            header_frame,
+            text="✕",
+            command=self.cancel_edit,
+            width=30,
+            height=30,
+            fg_color="transparent",
+            hover_color=self.colors['add_btn_bg'],
+            text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=18, weight="bold"),
+            corner_radius=15
+        )
+        close_btn.pack(side="right")
+        # ------------------------------------------
+
+        # Title entry field
+        self.title_input = ctk.CTkEntry(
+            parent,
+            fg_color=self.colors['card_bg'],
+            text_color=self.colors['text_dark'],
+            placeholder_text="Title",
+            placeholder_text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=20,weight="bold"),
+            border_width=0,
+            corner_radius=15,
+            height=45
+        )
+        self.title_input.pack(fill="x", padx=20)
+        
+        # Description label
+        desc_label = ctk.CTkLabel(
+            parent,
+            text="Description",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.colors['text_dark']
+        )
+        desc_label.pack(pady=(5, 10), padx=20, anchor="w")
+        
+        # Description box
+        self.task_input = ctk.CTkTextbox(
+            parent,
+            fg_color=self.colors['description_text'],
+            text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=13),
+            border_width=0,
+            corner_radius=15,
+            height=150
+        )
+        self.task_input.pack(fill="x", padx=20, pady=(0, 20))
+        
+        # Bottom controls
+        controls_frame = ctk.CTkFrame(parent, fg_color=self.colors['task_bg'], corner_radius=20, height=60)
+        controls_frame.pack(fill="x", padx=20, pady=(0, 20), side="bottom")
+        controls_frame.pack_propagate(False) # Enforce height
+        
+        # Priority dropdown
+        self.priority_var = ctk.StringVar(value="normal")
+        self.priority_btn = ctk.CTkButton(
+            controls_frame,
+            text="Priority",
+            command=self.toggle_priority_menu,
+            width=100,
+            height=35,
+            fg_color="white",
+            hover_color="#E0E0E0",
+            text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=11),
+            corner_radius=17
+        )
+        self.priority_btn.pack(side="left", padx=10, pady=12)
+        
+        # Date button
+        self.selected_date = None
+        self.date_btn = ctk.CTkButton(
+            controls_frame,
+            text="Date",
+            command=self.toggle_date_menu,
+            width=80,
+            height=35,
+            fg_color="white",
+            hover_color="#E0E0E0",
+            text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=11),
+            corner_radius=17
+        )
+        self.date_btn.pack(side="left", padx=5, pady=12)
+        
+        # Save button
+        self.save_btn = ctk.CTkButton(
+            controls_frame,
+            text="Save",
+            command=self.save_task,
+            width=70,
+            height=35,
+            fg_color="white",
+            hover_color="#E0E0E0",
+            text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=11, weight="bold"),
+            corner_radius=17
+        )
+        self.save_btn.pack(side="left", padx=5, pady=12)
+
+        # Delete Button (Created but hidden initially)
+        self.delete_btn = ctk.CTkButton(
+            controls_frame,
+            text="🗑", # Trash icon
+            command=self.delete_current_task,
+            width=40,
+            height=35,
+            fg_color="#FFEBEE", # Light red background
+            hover_color="#FFCDD2",
+            text_color="#D32F2F", # Red text
+            font=ctk.CTkFont(size=14),
+            corner_radius=17
+        )
+        
+        # Dropdown menus placeholders
+        self.priority_dropdown = None
+        self.date_dropdown = None
+
+    def toggle_priority_menu(self):
+        """Toggle priority dropdown menu"""
+        # Close date menu if open
+        if self.date_dropdown and self.date_dropdown.winfo_exists():
+            self.date_dropdown.destroy()
+            self.date_dropdown = None
+        
+        # Toggle priority menu
+        if self.priority_dropdown and self.priority_dropdown.winfo_exists():
+            self.priority_dropdown.destroy()
+            self.priority_dropdown = None
             return
         
-        self.date_popup = ctk.CTkToplevel(self.parent)
-        self.date_popup.title("Select Date")
-        self.date_popup.geometry("250x280")
-        self.date_popup.transient(self.parent)
-        
-        # Quick date buttons
-        quick_frame = ctk.CTkFrame(self.date_popup, fg_color="transparent")
-        quick_frame.pack(fill="x", padx=10, pady=10)
-        
-        today = datetime.now()
-        quick_dates = [
-            ("Today", today.strftime("%Y-%m-%d")),
-            ("Tomorrow", (today + timedelta(days=1)).strftime("%Y-%m-%d")),
-            ("Next Week", (today + timedelta(days=7)).strftime("%Y-%m-%d")),
-        ]
-        
-        for text, date in quick_dates:
-            btn = ctk.CTkButton(
-                quick_frame,
-                text=text,
-                command=lambda d=date, t=text: self.select_date(d, t),
-                height=30,
-                fg_color="#E3F2FD",
-                hover_color="#BBDEFB",
-                text_color="#1976D2"
-            )
-            btn.pack(fill="x", pady=2)
-        
-        # Calendar widget
-        try:
-            cal = DateEntry(
-                self.date_popup,
-                width=20,
-                background='#2196F3',
-                foreground='white',
-                borderwidth=2,
-                date_pattern='yyyy-mm-dd'
-            )
-            cal.pack(pady=10)
-            
-            def on_date_select(event=None):
-                date = cal.get_date()
-                date_str = date.strftime("%Y-%m-%d")
-                display = date.strftime("%b %d")
-                self.select_date(date_str, display)
-            
-            cal.bind("<<DateEntrySelected>>", on_date_select)
-        except Exception as e:
-            # Fallback if tkcalendar not installed
-            label = ctk.CTkLabel(
-                self.date_popup,
-                text="Install tkcalendar for date picker:\npip install tkcalendar",
-                text_color="gray"
-            )
-            label.pack(pady=10)
-        
-        # No date button
-        no_date_btn = ctk.CTkButton(
-            self.date_popup,
-            text="No deadline",
-            command=lambda: self.select_date(None, "No date"),
-            fg_color="#FFEBEE",
-            hover_color="#FFCDD2",
-            text_color="#C62828"
+        # Create priority dropdown
+        self.priority_dropdown = ctk.CTkFrame(
+            self.right_column,
+            fg_color="white",
+            corner_radius=10,
+            border_width=1,
+            border_color="#E0E0E0",
+            width=120,
+            height=100
         )
-        no_date_btn.pack(pady=10)
+        
+        # Position below the priority button
+        self.priority_dropdown.place(x=30, y=520)
+        
+        priorities = [("Low", "low"), ("Normal", "normal"), ("High", "high")]
+        for text, value in priorities:
+            btn = ctk.CTkButton(
+                self.priority_dropdown,
+                text=text,
+                command=lambda v=value, t=text: self.select_priority(v, t),
+                height=30,
+                fg_color="transparent",
+                hover_color="#E3F2FD",
+                text_color=self.colors['text_dark'],
+                font=ctk.CTkFont(size=11),
+                anchor="w"
+            )
+            btn.pack(fill="x", padx=5, pady=2)
+    
+    def select_priority(self, priority, display_text):
+        """Select priority and close dropdown"""
+        self.priority_var.set(priority)
+        self.priority_btn.configure(text=f"{display_text}▼")
+        
+        if self.priority_dropdown:
+            self.priority_dropdown.destroy()
+            self.priority_dropdown = None
+    
+    def toggle_date_menu(self):
+        """Toggle custom calendar popup"""
+        # Close priority menu if open
+        if self.priority_dropdown and self.priority_dropdown.winfo_exists():
+            self.priority_dropdown.destroy()
+            self.priority_dropdown = None
+        
+        # Close calendar if already open
+        if self.date_dropdown and self.date_dropdown.winfo_exists():
+            self.date_dropdown.destroy()
+            self.date_dropdown = None
+            return
+
+        # Determine colors based on current theme (Dark vs Light)
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        cal_bg = "#2B2042" if is_dark else "white"  # Use a dark purple for dark mode
+        cal_text = "white" if is_dark else "black"
+
+        # Create the Calendar Popup
+        self.date_dropdown = CalendarPopup(
+            self.right_column, 
+            on_select_callback=self.on_date_selected,
+            fg_color=cal_bg,
+            text_color=cal_text
+        )
+        
+        # Position it smartly
+        # Note: You might need to adjust y=520 depending on your layout height
+        self.date_dropdown.place(x=-20, y=320) 
+
+    def on_date_selected(self, date_str):
+        """Callback when a date is clicked on the calendar"""
+        self.select_date(date_str, date_str) # Pass date_str as both value and display text
+        
+        # Close calendar
+        if self.date_dropdown:
+            self.date_dropdown.destroy()
+            self.date_dropdown = None
+        
+    def on_date_selected(self, date_str):
+        """Callback when a date is clicked on the calendar"""
+        self.select_date(date_str, date_str) # Pass date_str as both value and display text
+        # Close calendar
+        if self.date_dropdown:
+            self.date_dropdown.destroy()
+            self.date_dropdown = None
     
     def select_date(self, date_str, display_text):
         """Handle date selection"""
         self.selected_date = date_str
         if date_str:
-            self.date_btn.configure(text=f"📅 {display_text}")
+            try:
+                # Calendar returns YYYY-MM-DD, parse it for display
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                display = dt.strftime("%d/%m") # Show as DD/MM on the button
+            except:
+                display = display_text
+            self.date_btn.configure(text=f"{display}▼")
         else:
-            self.date_btn.configure(text="📅 No date")
-        
-        if self.date_popup:
-            self.date_popup.destroy()
+            self.date_btn.configure(text="Date▼")
     
-    def add_task(self):
-        """Add a new task"""
-        task_text = self.task_input.get().strip()
-        if task_text:
-            deadline = self.selected_date or datetime.now().strftime("%Y-%m-%d")
-            # Extract priority from the emoji format
-            priority_raw = self.priority_var.get()
-            if "low" in priority_raw:
-                priority = "low"
-            elif "high" in priority_raw:
-                priority = "high"
-            else:
-                priority = "normal"
+    def save_task(self):
+        """Save the current task"""
+        # 1. Get Inputs
+        title = ""
+        if hasattr(self, 'title_input'):
+            title = self.title_input.get().strip()
             
-            task_manager.add_task(task_text, deadline, priority)
-            
-            # Reset inputs
-            self.task_input.delete(0, "end")
-            self.selected_date = None
-            self.date_btn.configure(text="📅 Today")
-            self.priority_menu.set("⚪ normal")
-            
-            self.update_task_display()
-            self.update_stats()
-    
-    def set_filter(self, filter_type):
-        """Set task filter"""
-        self.filter_var.set(filter_type)
+        description = self.task_input.get("1.0", "end-1c").strip()
         
-        # Update button colors
-        for f in ["all", "active", "done", "today"]:
-            btn = getattr(self, f"filter_btn_{f}", None)
-            if btn:
-                if f == filter_type:
-                    btn.configure(fg_color="#2196F3", text_color="white")
-                else:
-                    btn.configure(fg_color="#E0E0E0", text_color="black")
+        if not title:
+            tk.messagebox.showwarning("Missing Title", "The task title cannot be blank.")
+            # Focus the title entry so they can type immediately
+            self.title_input.focus()
+            return # STOP here, do not save
+            
+        # Check if a specific date was chosen (stored in self.selected_date)
+        if not self.selected_date:
+            tk.messagebox.showwarning("Missing Date", "You must choose a due date.")
+            return # STOP here, do not save
+
+        # If we passed both checks, proceed to save
+        deadline = self.selected_date
+        priority = self.priority_var.get()
         
+        if self.editing_task_id:
+            # Edit existing task
+            task_manager.edit_task(
+                self.editing_task_id,
+                text=title,
+                description=description,
+                deadline=deadline,
+                priority=priority
+            )
+        else:
+            # Add new task
+            task_manager.add_task(
+                text=title, 
+                description=description,
+                deadline=deadline, 
+                priority=priority
+            )
+        
+        # Close panel and refresh
+        self.hide_add_panel()
         self.update_task_display()
     
-    def update_stats(self):
-        """Update task statistics"""
-        all_tasks = task_manager.tasks
-        pending = len([t for t in all_tasks if not t.get("done")])
-        done = len([t for t in all_tasks if t.get("done")])
-        overdue = len(task_manager.get_overdue_tasks())
-        
-        stats_text = f"📊 {len(all_tasks)} total | ✓ {done} done | ⏳ {pending} pending"
-        if overdue > 0:
-            stats_text += f" | 🔴 {overdue} overdue"
-        
-        self.stats_label.configure(text=stats_text)
+    def cancel_edit(self):
+        """Cancel editing and close panel"""
+        self.hide_add_panel()
+    
+    def clear_input(self):
+        """Clear input fields"""
+        if hasattr(self, 'title_input'):
+            self.title_input.delete(0, "end")
+        if hasattr(self, 'task_input'):
+            self.task_input.delete("1.0", "end")
+        self.selected_date = None
+        if hasattr(self, 'date_btn'):
+            self.date_btn.configure(text="Date▼")
+        self.priority_var.set("normal")
+        if hasattr(self, 'priority_btn'):
+            self.priority_btn.configure(text="Priority▼")
     
     def update_task_display(self):
         """Update the task list display"""
@@ -316,33 +505,7 @@ class TodoApplet:
         for widget in self.tasks_container.winfo_children():
             widget.destroy()
         
-        # Get all tasks
         tasks = task_manager.tasks
-        
-        # Apply search filter
-        search_query = self.search_var.get().strip().lower()
-        if search_query:
-            tasks = [t for t in tasks if search_query in t.get("text", "").lower()]
-        
-        # Apply status filter
-        filter_type = self.filter_var.get()
-        if filter_type == "active":
-            tasks = [t for t in tasks if not t.get("done")]
-        elif filter_type == "done":
-            tasks = [t for t in tasks if t.get("done")]
-        elif filter_type == "today":
-            today = datetime.now().strftime("%Y-%m-%d")
-            tasks = [t for t in tasks if t.get("deadline") == today]
-        
-        if not tasks:
-            empty_label = ctk.CTkLabel(
-                self.tasks_container,
-                text="No tasks found. Add your first task above!",
-                text_color="gray",
-                font=ctk.CTkFont(size=14)
-            )
-            empty_label.pack(pady=50)
-            return
         
         # Sort by deadline and priority
         priority_order = {"high": 0, "normal": 1, "low": 2}
@@ -359,242 +522,184 @@ class TodoApplet:
         
         for task in tasks_sorted:
             self.create_task_card(task, today)
+        
+        # Add "+" button at the end
+        self.create_add_button()
+    
+    def create_add_button(self):
+        """Create the add new task button"""
+        add_card = ctk.CTkFrame(
+            self.tasks_container,
+            fg_color=self.colors['add_btn_bg'],
+            corner_radius=20,
+            height=80
+        )
+        add_card.pack(fill="x", pady=8, padx=5)
+        add_card.pack_propagate(False)
+        
+        add_btn = ctk.CTkButton(
+            add_card,
+            text="+",
+            command=self.show_add_panel,
+            fg_color="transparent",
+            hover_color="#D0C8D8",
+            text_color=self.colors['text_dark'],
+            font=ctk.CTkFont(size=36, weight="bold")
+        )
+        add_btn.pack(expand=True)
     
     def create_task_card(self, task, today):
         """Create a task card widget"""
         is_done = task.get("done", False)
-        is_overdue = task.get("deadline") and task["deadline"] < today and not is_done
         priority = task.get("priority", "normal")
-        
-        # Card colors based on state and theme
-        is_dark = ctk.get_appearance_mode() == "Dark"
-        
-        if is_done:
-            bg_color = "#2E4534" if is_dark else "#E8F5E9"
-            border_color = "#4CAF50" if is_dark else "#81C784"
-        elif is_overdue:
-            bg_color = "#4A2020" if is_dark else "#FFEBEE"
-            border_color = "#EF5350" if is_dark else "#E57373"
-        elif priority == "high":
-            bg_color = "#4A3520" if is_dark else "#FFF3E0"
-            border_color = "#FF9800" if is_dark else "#FFB74D"
-        else:
-            bg_color = "#2D2D2D" if is_dark else "#FFFFFF"
-            border_color = "#555555" if is_dark else "#E0E0E0"
         
         # Task card frame
         card = ctk.CTkFrame(
             self.tasks_container,
-            fg_color=bg_color,
-            corner_radius=8,
-            border_width=1,
-            border_color=border_color
+            fg_color=self.colors['task_bg'],
+            corner_radius=20,
+            height=80
         )
-        card.pack(fill="x", pady=4, padx=2)
+        card.pack(fill="x", pady=8, padx=5)
+        card.pack_propagate(False)
         
-        # Checkbox
-        checkbox_text = "☑" if is_done else "☐"
-        checkbox = ctk.CTkButton(
+        # Checkbox (Kept separate so clicking it doesn't open edit)
+        checkbox_text = ctk.StringVar(value="off")
+        checkbox = ctk.CTkCheckBox(
             card,
-            text=checkbox_text,
-            width=30,
-            height=30,
-            fg_color="transparent",
-            hover_color="#E0E0E0",
-            text_color="#4CAF50" if is_done else "gray",
-            font=ctk.CTkFont(size=18),
-            command=lambda t=task: self.toggle_task(t["id"])
+            text="",
+            variable=checkbox_text,
+            onvalue="on",
+            offvalue="off",
+            width=40,
+            height=40,
+            hover_color="#D0C8D8",
+            text_color=self.colors['text_dark'],
         )
-        checkbox.pack(side="left", padx=5)
+        checkbox.pack(side="left", padx=15, pady=20)
+        
+        # Clickable Info Container
+        # We wrap the text info in a frame that detects clicks
+        info_frame = ctk.CTkButton(
+            card, 
+            fg_color="transparent", 
+            hover_color=self.colors['add_btn_bg'], # Subtle hover effect
+            text="", 
+            command=lambda t=task: self.load_task_details(t)
+        )
+        info_frame.pack(side="left", fill="both", expand=True, pady=5, padx=5)
+        info_frame.destroy() # Remove the button attempt
+        
+        info_frame = ctk.CTkFrame(card, fg_color="transparent")
+        info_frame.pack(side="left", fill="both", expand=True, pady=10)
+        
+        # Bind click to open details
+        info_frame.bind("<Button-1>", lambda e, t=task: self.load_task_details(t))
         
         # Task text
-        text_style = ctk.CTkFont(size=14)
-        if is_done:
-            text_color = "gray"
-        else:
-            text_color = "#E0E0E0" if is_dark else "black"
-        
         task_label = ctk.CTkLabel(
-            card,
-            text=task["text"],
-            font=text_style,
-            text_color=text_color,
+            info_frame,
+            text=task["text"][:40] + "..." if len(task["text"]) > 40 else task["text"],
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=self.colors['text_dark'],
             anchor="w"
         )
-        task_label.pack(side="left", fill="x", expand=True, padx=5)
+        task_label.pack(anchor="w", pady=(0, 5))
         
-        # Deadline badge
-        if task.get("deadline"):
+        # Bind label too so clicking text works
+        task_label.bind("<Button-1>", lambda e, t=task: self.load_task_details(t))
+        
+        # Details Row
+        details_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
+        details_frame.pack(anchor="w")
+        
+        # Bind details frame
+        details_frame.bind("<Button-1>", lambda e, t=task: self.load_task_details(t))
+
+        # Date label
+        if task.get("deadline") and task.get("deadline") != today:
             deadline = task["deadline"]
-            if deadline == today:
-                deadline_text = "Today"
-                deadline_color = "#2196F3"
-            elif deadline == (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"):
-                deadline_text = "Tomorrow"
-                deadline_color = "#FF9800"
-            elif is_overdue:
-                deadline_text = f"Overdue"
-                deadline_color = "#F44336"
-            else:
-                try:
-                    dt = datetime.strptime(deadline, "%Y-%m-%d")
-                    deadline_text = dt.strftime("%b %d")
-                except:
-                    deadline_text = deadline
-                deadline_color = "#9E9E9E"
+            try:
+                dt = datetime.strptime(deadline, "%Y-%m-%d")
+                date_display = dt.strftime("%d/%m")
+            except:
+                date_display = deadline
             
-            deadline_label = ctk.CTkLabel(
-                card,
-                text=deadline_text,
+            date_label = ctk.CTkLabel(
+                details_frame,
+                text=f"📅 {date_display}",
                 font=ctk.CTkFont(size=11),
-                text_color=deadline_color
+                text_color=self.colors['text_dark']
             )
-            deadline_label.pack(side="left", padx=5)
-        
-        # Priority indicator
-        if priority == "high" and not is_done:
+            date_label.pack(side="left", padx=(0, 15))
+            date_label.bind("<Button-1>", lambda e, t=task: self.load_task_details(t))
+
+        # Priority badge
+        if priority != "normal":
+            prio_colors = {"high": "#FF5252", "low": "#4CAF50"}
+            p_color = prio_colors.get(priority, "gray")
+            
             priority_label = ctk.CTkLabel(
-                card,
-                text="🔥",
-                font=ctk.CTkFont(size=12)
+                details_frame,
+                text=f"• {priority.capitalize()}",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=p_color
             )
-            priority_label.pack(side="left", padx=2)
+            priority_label.pack(side="left")
+            priority_label.bind("<Button-1>", lambda e, t=task: self.load_task_details(t))
+
+        # Note: Old delete button is removed.
+    
+    def load_task_details(self,task):
+        """Load a task into the right panel for editing"""
+        self.show_add_panel() # Ensure panel is visible
         
-        # Delete button
-        delete_btn = ctk.CTkButton(
-            card,
-            text="🗑",
-            width=30,
-            height=30,
-            fg_color="transparent",
-            hover_color="#FFCDD2",
-            text_color="#E57373",
-            command=lambda t=task: self.delete_task(t["id"])
-        )
-        delete_btn.pack(side="right", padx=5, pady=5)
+        self.is_editing = True
+        self.editing_task_id = task["id"]
         
-        # Edit button
-        edit_btn = ctk.CTkButton(
-            card,
-            text="✏️",
-            width=30,
-            height=30,
-            fg_color="transparent",
-            hover_color="#E3F2FD",
-            text_color="#1976D2",
-            command=lambda t=task: self.show_edit_popup(t)
-        )
-        edit_btn.pack(side="right", padx=2, pady=5)
+        # 1. Load Title
+        self.title_input.delete(0, "end")
+        self.title_input.insert(0, task["text"])
+        
+        # 2. Load Description (If your task_manager supports it, otherwise leave blank)
+        self.task_input.delete("1.0", "end")
+        if "description" in task:
+            self.task_input.insert("1.0", task["description"])
+            
+        # 3. Load Date
+        deadline = task.get("deadline")
+        self.selected_date = deadline
+        if deadline:
+            try:
+                dt = datetime.strptime(deadline, "%Y-%m-%d")
+                display = dt.strftime("%d/%m")
+            except:
+                display = "Date"
+            self.date_btn.configure(text=f"{display}▼")
+        else:
+            self.date_btn.configure(text="Date▼")
+
+        # 4. Load Priority
+        priority = task.get("priority", "normal")
+        self.priority_var.set(priority)
+        self.priority_btn.configure(text=f"{priority.capitalize()}▼")
+        
+        if hasattr(self, 'delete_btn'):
+            self.delete_btn.pack(side="left", padx=5, pady=12)
     
     def toggle_task(self, task_id):
         """Toggle task completion"""
         task_manager.toggle_task(task_id)
         self.update_task_display()
-        self.update_stats()
     
     def delete_task(self, task_id):
         """Delete a task"""
         task_manager.delete_task(task_id)
         self.update_task_display()
-        self.update_stats()
-    
-    def clear_completed(self):
-        """Clear all completed tasks"""
-        removed = task_manager.clear_completed()
-        if removed > 0:
+    def delete_current_task(self):
+        """Delete the task currently being edited"""
+        if self.editing_task_id:
+            task_manager.delete_task(self.editing_task_id)
+            self.hide_add_panel()
             self.update_task_display()
-            self.update_stats()
     
-    def show_edit_popup(self, task):
-        """Show popup to edit a task"""
-        popup = ctk.CTkToplevel(self.parent)
-        popup.title("Edit Task")
-        popup.geometry("420x350")
-        popup.resizable(False, False)
-        
-        # Wait for window to be ready before adding widgets
-        popup.after(100, lambda: self._create_edit_widgets(popup, task))
-    
-    def _create_edit_widgets(self, popup, task):
-        """Create edit popup widgets after window is ready"""
-        # Make sure popup still exists
-        if not popup.winfo_exists():
-            return
-            
-        popup.grab_set()
-        popup.focus_force()
-        
-        # Task text
-        text_label = ctk.CTkLabel(popup, text="Task:", font=ctk.CTkFont(size=14, weight="bold"))
-        text_label.pack(pady=(20, 5), padx=20, anchor="w")
-        
-        text_entry = ctk.CTkEntry(popup, height=40, width=380)
-        text_entry.insert(0, task.get("text", ""))
-        text_entry.pack(padx=20, pady=5)
-        text_entry.focus()
-        
-        # Deadline
-        deadline_label = ctk.CTkLabel(popup, text="Deadline:", font=ctk.CTkFont(size=14, weight="bold"))
-        deadline_label.pack(pady=(15, 5), padx=20, anchor="w")
-        
-        deadline_entry = ctk.CTkEntry(popup, height=40, width=380, placeholder_text="YYYY-MM-DD")
-        if task.get("deadline"):
-            deadline_entry.insert(0, task.get("deadline"))
-        deadline_entry.pack(padx=20, pady=5)
-        
-        # Priority
-        priority_label = ctk.CTkLabel(popup, text="Priority:", font=ctk.CTkFont(size=14, weight="bold"))
-        priority_label.pack(pady=(15, 5), padx=20, anchor="w")
-        
-        priority_var = ctk.StringVar(value=task.get("priority", "normal"))
-        priority_menu = ctk.CTkOptionMenu(
-            popup,
-            values=["low", "normal", "high"],
-            variable=priority_var,
-            width=380,
-            height=35
-        )
-        priority_menu.pack(padx=20, pady=5)
-        
-        # Buttons frame
-        btn_frame = ctk.CTkFrame(popup, fg_color="transparent")
-        btn_frame.pack(pady=20)
-        
-        def save_changes():
-            new_text = text_entry.get().strip()
-            new_deadline = deadline_entry.get().strip() or None
-            new_priority = priority_var.get()
-            
-            if new_text:
-                task_manager.edit_task(
-                    task["id"],
-                    text=new_text,
-                    deadline=new_deadline,
-                    priority=new_priority
-                )
-                self.update_task_display()
-                self.update_stats()
-            popup.destroy()
-        
-        save_btn = ctk.CTkButton(
-            btn_frame,
-            text="💾 Save",
-            command=save_changes,
-            fg_color="#4CAF50",
-            hover_color="#43A047",
-            width=120,
-            height=40
-        )
-        save_btn.pack(side="left", padx=10)
-        
-        cancel_btn = ctk.CTkButton(
-            btn_frame,
-            text="Cancel",
-            command=popup.destroy,
-            fg_color="#9E9E9E",
-            hover_color="#757575",
-            width=120,
-            height=40
-        )
-        cancel_btn.pack(side="left", padx=10)
-

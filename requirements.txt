@@ -12,3 +12,5 @@ tkcalendar>=1.6.1
 # Ubuntu/Debian: sudo apt-get install python3-tk
 # Fedora: sudo dnf install python3-tkinter
 # Arch: sudo pacman -S tk
+
+# currently, i have no way of editing an existing task, i wanted to edit it by clicking the task card and it opens the detailed task which in the right frame. Also wierd choice but i wanted the delete button beside the save button

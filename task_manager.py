@@ -66,7 +66,7 @@ class TaskManager:
         except Exception as e:
             print(f"Error saving tasks: {e}")
     
-    def add_task(self, text, deadline=None, priority="normal"):
+    def add_task(self, text, description="", deadline=None, priority="normal"):
         """Add a new task
         
         Args:
@@ -77,6 +77,7 @@ class TaskManager:
         task = {
             "id": len(self.tasks) + 1,
             "text": text,
+            "description": description,
             "done": False,
             "deadline": deadline,
             "priority": priority,
@@ -139,22 +140,14 @@ class TaskManager:
         """Get all pending (not done) tasks"""
         return [t for t in self.tasks if not t.get("done")]
     
-    def edit_task(self, task_id, text=None, deadline=None, priority=None):
-        """Edit an existing task
-        
-        Args:
-            task_id: ID of the task to edit
-            text: New task text (optional)
-            deadline: New deadline (optional)
-            priority: New priority (optional)
-        
-        Returns:
-            True if task was found and updated, False otherwise
-        """
+    def edit_task(self, task_id, text=None, description=None, deadline=None, priority=None):
+        """Edit an existing task including description"""
         for task in self.tasks:
             if task["id"] == task_id:
                 if text is not None:
                     task["text"] = text
+                if description is not None:
+                    task["description"] = description
                 if deadline is not None:
                     task["deadline"] = deadline
                 if priority is not None:
@@ -188,7 +181,10 @@ class TaskManager:
         query = query.lower().strip()
         if not query:
             return self.tasks
-        return [t for t in self.tasks if query in t.get("text", "").lower()]
+        return [
+            t for t in self.tasks 
+            if query in t.get("text", "").lower() or query in t.get("description", "").lower()
+        ]
 
 
 # Global instance

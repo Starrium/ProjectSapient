@@ -421,190 +421,58 @@ class App(ctk.CTk):
         self.current_view = "documents"
         self.hide_all_views()
         
-        # Check if home view is cached
         if "home" in self.cached_views and self.cached_views["home"].winfo_exists():
             self.cached_views["home"].pack(fill="both", expand=True, padx=30, pady=20)
             return
 
-        # Create container for content
         content_frame = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
         content_frame.pack(fill="both", expand=True, padx=30, pady=20)
 
-        # Search bar at top
+        # Search bar
         search_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
         search_frame.pack(fill="x", pady=(0, 20))
-
         search_entry = ctk.CTkEntry(
-            search_frame,
-            placeholder_text="search",
-            height=40,
-            font=ctk.CTkFont(size=14),
-            fg_color=self.theme_colors["search_bar_bg"],
-            border_width=1,
+            search_frame, placeholder_text="Search", height=40,
+            font=ctk.CTkFont(size=14), fg_color=self.theme_colors["search_bar_bg"], border_width=1
         )
         search_entry.pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(search_frame, text="🔍", width=40, height=40, fg_color="transparent", hover_color="#E0E0E0").pack(side="right", padx=(10, 0))
 
-        search_button = ctk.CTkButton(
-            search_frame,
-            text="🔍",
-            width=40,
-            height=40,
-            fg_color="transparent",
-            hover_color="#E0E0E0",
-        )
-        search_button.pack(side="right", padx=(10, 0))
-
-        # Main content area with calendar and tasks
         content_grid = ctk.CTkFrame(content_frame, fg_color="transparent")
         content_grid.pack(fill="both", expand=True)
-        content_grid.grid_columnconfigure(0, weight=3)  # Calendar column narrower
-        content_grid.grid_columnconfigure(1, weight=3)  # Right side wider
+        content_grid.grid_columnconfigure(0, weight=3)
+        content_grid.grid_columnconfigure(1, weight=3)
         content_grid.grid_rowconfigure(0, weight=1)
 
-        # Left side - Calendar and Task card stacked
         left_panel = ctk.CTkFrame(content_grid, fg_color="transparent")
         left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         left_panel.grid_rowconfigure(0, weight=10)
         left_panel.grid_rowconfigure(1, weight=5)
         left_panel.grid_columnconfigure(0, weight=10)
 
-        # Calendar (thinner)
-        calendar_card = ctk.CTkFrame(
-            left_panel, fg_color=self.theme_colors["calendar_bg"], corner_radius=15
-        )
+        calendar_card = ctk.CTkFrame(left_panel, fg_color=self.theme_colors["calendar_bg"], corner_radius=15)
         calendar_card.grid(row=0, column=0, sticky="nsew", pady=(0, 10))
-        self.create_calendar(calendar_card)
 
-        # Task preview card under calendar
-        task_card = ctk.CTkFrame(
+        self.create_calendar(calendar_card)
+        self.task_card = ctk.CTkFrame(
             left_panel, fg_color=self.theme_colors["task_card_bg_1"], corner_radius=15
         )
-        task_card.grid(row=1, column=0, sticky="nsew")
+        self.task_card.grid(row=1, column=0, sticky="nsew")
 
-        # Get real upcoming tasks
-        if task_manager:
-            upcoming = task_manager.get_upcoming_tasks(limit=5)
-            today_tasks = task_manager.get_today_tasks()
-            overdue = task_manager.get_overdue_tasks()
-
-            # Header with task count
-            pending_count = len(task_manager.get_all_pending_tasks())
-            header_text = f"📋 Upcoming Tasks ({pending_count})"
-
-            task_header = ctk.CTkLabel(
-                task_card,
-                text=header_text,
-                font=ctk.CTkFont(size=16, weight="bold"),
-                text_color=self.theme_colors["text_color"],
-            )
-            task_header.pack(anchor="w", padx=20, pady=(15, 5))
-
-            # Show overdue warning if any
-            if overdue:
-                overdue_label = ctk.CTkLabel(
-                    task_card,
-                    text=f"🔴 {len(overdue)} overdue task(s)!",
-                    font=ctk.CTkFont(size=11),
-                    text_color="#F44336",
-                )
-                overdue_label.pack(anchor="w", padx=20, pady=(0, 5))
-
-            # Show today's tasks first
-            if today_tasks:
-                today_label = ctk.CTkLabel(
-                    task_card,
-                    text="Today:",
-                    font=ctk.CTkFont(size=12, weight="bold"),
-                    text_color=self.theme_colors["text_color"],
-                )
-                today_label.pack(anchor="w", padx=20, pady=(5, 2))
-
-                for task in today_tasks[:3]:
-                    if not task.get("done"):
-                        task_label = ctk.CTkLabel(
-                            task_card,
-                            text=f"  • {task['text'][:30]}{'...' if len(task['text']) > 30 else ''}",
-                            font=ctk.CTkFont(size=11),
-                            anchor="w",
-                            text_color=self.theme_colors["text_color"],
-                        )
-                        task_label.pack(anchor="w", padx=20, pady=1)
-
-            # Show upcoming tasks
-            future_tasks = [
-                t
-                for t in upcoming
-                if t.get("deadline") != datetime.now().strftime("%Y-%m-%d")
-            ]
-            if future_tasks:
-                upcoming_label = ctk.CTkLabel(
-                    task_card,
-                    text="Coming up:",
-                    font=ctk.CTkFont(size=12, weight="bold"),
-                    text_color=self.theme_colors["text_color"],
-                )
-                upcoming_label.pack(anchor="w", padx=20, pady=(8, 2))
-
-                for task in future_tasks[:3]:
-                    deadline = task.get("deadline", "")
-                    try:
-                        dt = datetime.strptime(deadline, "%Y-%m-%d")
-                        date_str = dt.strftime("%b %d")
-                    except:
-                        date_str = deadline
-
-                    task_label = ctk.CTkLabel(
-                        task_card,
-                        text=f"  • [{date_str}] {task['text'][:25]}{'...' if len(task['text']) > 25 else ''}",
-                        font=ctk.CTkFont(size=11),
-                        anchor="w",
-                        text_color=self.theme_colors["text_color"],
-                    )
-                    task_label.pack(anchor="w", padx=20, pady=1)
-
-            if not upcoming and not today_tasks and not overdue:
-                empty_label = ctk.CTkLabel(
-                    task_card,
-                    text="No upcoming tasks!\nAdd tasks in To-Do List.",
-                    font=ctk.CTkFont(size=12),
-                    text_color="gray",
-                )
-                empty_label.pack(pady=20)
-        else:
-            task_date = ctk.CTkLabel(
-                task_card,
-                text="Task Manager not available",
-                font=ctk.CTkFont(size=14),
-                text_color=self.theme_colors["text_color"],
-            )
-            task_date.pack(anchor="w", padx=20, pady=20)
+        self.render_task_overview()
 
         # Right side - Recent files
-        right_panel = ctk.CTkFrame(
-            content_grid,
-            fg_color="transparent",
-        )
+        right_panel = ctk.CTkFrame(content_grid, fg_color="transparent")
         right_panel.grid(row=0, column=2, sticky="nsew", padx=(20, 0))
         right_panel.grid_rowconfigure(0, weight=1)
-        right_panel.grid_rowconfigure(1, weight=0)
-        right_panel.grid_columnconfigure(0, weight=5)
-
-        # Recent files card (main area)
+        
         files_card = ctk.CTkFrame(right_panel, fg_color="transparent", corner_radius=15)
         files_card.grid(row=0, column=0, sticky="nsew", pady=(0, 5))
-
-        files_title = ctk.CTkLabel(
-            files_card,
-            text="Recent files",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color=self.theme_colors["recent_files_fg"],
-            corner_radius=8,
-            width=120,
-            height=30,
-        )
-        files_title.pack(padx=100, pady=20)
+        ctk.CTkLabel(
+            files_card, text="Recent files", font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color=self.theme_colors["recent_files_fg"], corner_radius=8, width=120, height=30
+        ).pack(padx=100, pady=20)
         
-        # Cache this view
         self.cached_views["home"] = content_frame
 
     def change_month(self, step):
@@ -765,88 +633,101 @@ class App(ctk.CTk):
                     dot.place(relx=0.8, rely=0.1)
 
     def show_day_tasks(self, date_str):
-        """Show tasks for a specific date in a popup"""
+        """Update the task card to show details for a specific date"""
+        if not hasattr(self, 'task_card') or not self.task_card.winfo_exists():
+            return
+
+        # Clear the card
+        for widget in self.task_card.winfo_children():
+            widget.destroy()
+
         if not task_manager:
             return
 
         tasks = task_manager.get_tasks_by_date(date_str)
+        
+        # 1. Back Button
+        header_frame = ctk.CTkFrame(self.task_card, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=(10, 5))
+        
+        back_btn = ctk.CTkButton(
+            header_frame, 
+            text="← Back", 
+            width=60, 
+            height=25,
+            fg_color="transparent", 
+            text_color=self.theme_colors["text_color"],
+            hover_color=self.theme_colors["usage_card_bg"],
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self.render_task_overview # Click to go back to default view
+        )
+        back_btn.pack(side="left")
 
-        # Create popup window
-        popup = ctk.CTkToplevel(self)
-        popup.title(f"Tasks for {date_str}")
-        popup.geometry("350x400")
-        popup.transient(self)
-
-        # Center the popup
-        popup.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() // 2) - 175
-        y = self.winfo_y() + (self.winfo_height() // 2) - 200
-        popup.geometry(f"+{x}+{y}")
-
-        # Header
+        # 2. Date Header
         try:
             dt = datetime.strptime(date_str, "%Y-%m-%d")
-            header_text = dt.strftime("%A, %B %d, %Y")
-        except:
-            header_text = date_str
+            display_date = dt.strftime("%B %d, %Y")
+        except: display_date = date_str
 
-        header = ctk.CTkLabel(
-            popup, text=header_text, font=ctk.CTkFont(size=16, weight="bold")
-        )
-        header.pack(pady=(20, 10))
+        ctk.CTkLabel(
+            header_frame, 
+            text=display_date, 
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.theme_colors["text_color"]
+        ).pack(side="right", padx=10)
 
-        # Tasks count
-        pending = [t for t in tasks if not t.get("done")]
-        done = [t for t in tasks if t.get("done")]
+        # 3. Task List (Scrollable if many tasks)
+        scroll_frame = ctk.CTkScrollableFrame(self.task_card, fg_color="transparent")
+        scroll_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
-        count_label = ctk.CTkLabel(
-            popup,
-            text=f"📋 {len(pending)} pending | ✓ {len(done)} done",
-            font=ctk.CTkFont(size=12),
-            text_color="gray",
-        )
-        count_label.pack(pady=(0, 15))
+        if not tasks:
+            ctk.CTkLabel(
+                scroll_frame, 
+                text="No tasks for this date.",
+                text_color="gray"
+            ).pack(pady=20)
+            return
 
-        # Tasks list
-        if tasks:
-            tasks_frame = ctk.CTkScrollableFrame(popup, fg_color="transparent")
-            tasks_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        for task in tasks:
+            # Card for each task
+            t_frame = ctk.CTkFrame(scroll_frame, fg_color=self.theme_colors["calendar_bg"], corner_radius=10)
+            t_frame.pack(fill="x", pady=5, padx=5)
+            
+            # Title row
+            title_row = ctk.CTkFrame(t_frame, fg_color="transparent")
+            title_row.pack(fill="x", padx=10, pady=(8, 2))
+            
+            prio = task.get("priority", "normal")
+            prio_color = "#FF5252" if prio == "high" else ("#4CAF50" if prio == "low" else "gray")
 
-            for task in tasks:
-                is_done = task.get("done", False)
+            ctk.CTkLabel(
+                title_row, 
+                text=f"{task['text']}", 
+                font=ctk.CTkFont(size=13, weight="bold"),
+                text_color="black",
+                anchor="w"
+            ).pack(side="left", fill="x", expand=True)
 
-                task_frame = ctk.CTkFrame(
-                    tasks_frame,
-                    fg_color="#E8F5E9" if is_done else "#FFFFFF",
-                    corner_radius=8,
-                )
-                task_frame.pack(fill="x", pady=3)
+            # Priority Badge
+            ctk.CTkLabel(
+                title_row, 
+                text=prio.capitalize(),
+                font=ctk.CTkFont(size=10, weight="bold"),
+                text_color=prio_color
+            ).pack(side="right")
 
-                checkbox = "☑" if is_done else "☐"
-                priority = task.get("priority", "normal")
-                priority_icon = "🔥" if priority == "high" else ""
-
-                task_label = ctk.CTkLabel(
-                    task_frame,
-                    text=f"{checkbox} {task['text']} {priority_icon}",
-                    font=ctk.CTkFont(size=12),
-                    text_color="gray" if is_done else "black",
+            # Description (if exists)
+            desc = task.get("description", "").strip()
+            if desc:
+                ctk.CTkLabel(
+                    t_frame,
+                    text=desc,
+                    font=ctk.CTkFont(size=11),
+                    text_color="gray",
                     anchor="w",
-                )
-                task_label.pack(fill="x", padx=10, pady=8)
-        else:
-            empty_label = ctk.CTkLabel(
-                popup,
-                text="No tasks for this date.\n\nGo to To-Do List to add tasks!",
-                font=ctk.CTkFont(size=13),
-                text_color="gray",
-            )
-            empty_label.pack(expand=True)
-
-        # Close button
-        close_btn = ctk.CTkButton(popup, text="Close", command=popup.destroy, width=100)
-        close_btn.pack(pady=15)
-
+                    wraplength=250, # Ensure text wraps
+                    justify="left"
+                ).pack(fill="x", padx=28, pady=(0, 8))
     def set_theme_colors(self, colors):
         self.theme_colors = colors
 
@@ -1013,6 +894,81 @@ class App(ctk.CTk):
         data_dir.mkdir(parents=True, exist_ok=True)
 
         return data_dir
+    def render_task_overview(self):
+        """Render the default upcoming tasks view in the task card"""
+        # Clear existing content
+        for widget in self.task_card.winfo_children():
+            widget.destroy()
+
+        if not task_manager:
+            ctk.CTkLabel(self.task_card, text="Task Manager not available").pack(pady=20)
+            return
+
+        upcoming = task_manager.get_upcoming_tasks(limit=5)
+        today_tasks = task_manager.get_today_tasks()
+        overdue = task_manager.get_overdue_tasks()
+        pending_count = len(task_manager.get_all_pending_tasks())
+
+        # Header
+        ctk.CTkLabel(
+            self.task_card,
+            text=f"📋 Upcoming Tasks ({pending_count})",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=self.theme_colors["text_color"],
+        ).pack(anchor="w", padx=20, pady=(15, 5))
+
+        # Overdue
+        if overdue:
+            ctk.CTkLabel(
+                self.task_card,
+                text=f"🔴 {len(overdue)} overdue task(s)!",
+                font=ctk.CTkFont(size=11), text_color="#F44336",
+            ).pack(anchor="w", padx=20, pady=(0, 5))
+
+        # Today
+        if today_tasks:
+            ctk.CTkLabel(
+                self.task_card,
+                text="Today:",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=self.theme_colors["text_color"],
+            ).pack(anchor="w", padx=20, pady=(5, 2))
+            
+            for task in today_tasks[:3]:
+                if not task.get("done"):
+                    ctk.CTkLabel(
+                        self.task_card,
+                        text=f"  • {task['text'][:30]}",
+                        font=ctk.CTkFont(size=11), anchor="w",
+                        text_color=self.theme_colors["text_color"],
+                    ).pack(anchor="w", padx=20, pady=1)
+
+        # Upcoming
+        future_tasks = [t for t in upcoming if t.get("deadline") != datetime.now().strftime("%Y-%m-%d")]
+        if future_tasks:
+            ctk.CTkLabel(
+                self.task_card,
+                text="Coming up:",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=self.theme_colors["text_color"],
+            ).pack(anchor="w", padx=20, pady=(8, 2))
+
+            for task in future_tasks[:3]:
+                date_str = task.get("deadline", "")
+                try:
+                    dt = datetime.strptime(date_str, "%Y-%m-%d")
+                    date_display = dt.strftime("%b %d")
+                except: date_display = date_str
+                
+                ctk.CTkLabel(
+                    self.task_card,
+                    text=f"  • [{date_display}] {task['text'][:25]}",
+                    font=ctk.CTkFont(size=11), anchor="w",
+                    text_color=self.theme_colors["text_color"],
+                ).pack(anchor="w", padx=20, pady=1)
+
+        if not upcoming and not today_tasks and not overdue:
+            ctk.CTkLabel(self.task_card, text="No upcoming tasks!", font=ctk.CTkFont(size=12), text_color="gray").pack(pady=20)
 
 
 if __name__ == "__main__":
