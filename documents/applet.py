@@ -176,37 +176,30 @@ class DocumentApplet:
         
         # --------------------------------------------------------------------
         # LEFT PANEL - Bảng danh sách tài liệu (bên trái)
-        # Chiều rộng cố định 350px, chứa search bar và document list
+        # Hiển thị khi chưa mở file nào
         # --------------------------------------------------------------------
         self.left_panel = ctk.CTkFrame(
             self.main_container,
             fg_color=self.colors['panel_bg'],
-            corner_radius=30,     # Bo tròn góc
-            width=350             # Chiều rộng cố định
+            corner_radius=30
         )
-        self.left_panel.pack(side="left", fill="both", expand=False, padx=20, pady=20)
-        self.left_panel.pack_propagate(False)  # Giữ nguyên width, không co giãn
+        # Không pack left_panel ngay, sẽ pack trong show_list_view()
         
         # --------------------------------------------------------------------
         # RIGHT PANEL - Bảng nội dung (bên phải)
-        # Co giãn theo cửa sổ, hiển thị PDF hoặc Note content
+        # Hiển thị khi mở file
         # --------------------------------------------------------------------
         self.right_panel = ctk.CTkFrame(
             self.main_container, 
             fg_color=self.colors['panel_bg'],
             corner_radius=30
         )
-        self.right_panel.pack(side="right", fill="both", expand=True, padx=20, pady=20)
+        # Không pack right_panel ngay, sẽ pack trong show_file_view()
         
         # ====================================================================
-        # KHỞI TẠO CÁC VIEW
+        # KHỚI TẠO - Hiển thị list view (danh sách file)
         # ====================================================================
-        self.init_left_panel()              # Khởi tạo panel danh sách
-        self.init_right_panel_placeholder() # Khởi tạo placeholder "Select a document"
-        
-        # Nếu có notes, hiển thị note đầu tiên
-        if self.notes:
-            self.show_note_content(self.notes[0])
+        self.show_list_view()
 
     # ========================================================================
     # PHẦN 3: QUẢN LÝ DỮ LIỆU (DATA MANAGEMENT)
@@ -277,11 +270,14 @@ class DocumentApplet:
         Khởi tạo Left Panel với:
         1. Search Bar - Ô tìm kiếm tài liệu
         2. Scrollable List - Danh sách tài liệu cuộn được
-        3. Add Button (+) - Nút thêm tài liệu mới
+        3. Add Buttons (PDF/TXT) - Nút thêm tài liệu mới
         """
         # Xóa tất cả widget cũ
         for widget in self.left_panel.winfo_children():
             widget.destroy()
+        
+        # Biến theo dõi item được chọn
+        self.selected_note_id = None
         
         # --------------------------------------------------------------------
         # SEARCH BAR - Ô tìm kiếm (FR-DCM-01)
@@ -297,13 +293,14 @@ class DocumentApplet:
         
         search_entry = ctk.CTkEntry(
             search_frame,
-            placeholder_text="🔍 Search documents...",  # Placeholder text
+            placeholder_text="🔍 Search",  # Placeholder text
             textvariable=self.search_var,
-            fg_color=self.colors['card_bg'],
-            text_color=self.colors['card_fg'],
-            placeholder_text_color="#888888",
-            corner_radius=15,
-            height=40
+            fg_color="#5A4A6A",
+            text_color="#FFFFFF",
+            placeholder_text_color="#AAAAAA",
+            corner_radius=20,
+            height=45,
+            border_width=0
         )
         search_entry.pack(fill="x")
             
@@ -316,7 +313,7 @@ class DocumentApplet:
             scrollbar_button_color=self.colors['panel_bg'],
             width=300
         )
-        self.scroll_frame.pack(fill="both", expand=True, padx=15, pady=20)
+        self.scroll_frame.pack(fill="both", expand=True, padx=15, pady=10)
         
         # Điền danh sách tài liệu vào scroll_frame
         self.populate_document_list()
@@ -334,7 +331,7 @@ class DocumentApplet:
         2. Sắp xếp notes theo ngày sửa đổi (mới nhất trước)
         3. Lọc theo search_query nếu có
         4. Tạo card cho mỗi note
-        5. Thêm nút [+] ở cuối
+        5. Thêm nút PDF/TXT ở cuối
         """
         # Xóa các item cũ
         for widget in self.scroll_frame.winfo_children():
@@ -347,6 +344,9 @@ class DocumentApplet:
         if search_query:
             search_lower = search_query.lower()
             sorted_notes = [n for n in sorted_notes if search_lower in n.get('title', '').lower()]
+        
+        # Ẩn các linked notes (note của PDF, title bắt đầu bằng "Note:")
+        sorted_notes = [n for n in sorted_notes if not n.get('title', '').startswith('Note:')]
         
         # Tạo card cho mỗi note
         for note in sorted_notes:
@@ -362,20 +362,65 @@ class DocumentApplet:
             ).pack(pady=30)
 
         # --------------------------------------------------------------------
-        # NÚT THÊM [+] - Ở cuối danh sách
-        # Click để mở menu thêm file PDF hoặc Note mới
+        # NÚT THÊM PDF/TXT - Ở cuối danh sách
+        # Thiết kế mới: Card với icon folder và 2 nút PDF, TXT
         # --------------------------------------------------------------------
-        ctk.CTkButton(
+        add_card = ctk.CTkFrame(
             self.scroll_frame,
-            text="+",
-            font=ctk.CTkFont(size=40, weight="bold"),
-            fg_color=self.colors['card_bg'],
-            text_color="black",
-            hover_color=self.colors['button_hover'],
-            height=60,
-            corner_radius=30,  # Bo tròn thành hình viên thuốc (pill)
-            command=self.show_add_menu
-        ).pack(fill="x", pady=20)
+            fg_color="#5A4A6A",
+            corner_radius=20,
+            height=55
+        )
+        add_card.pack(fill="x", pady=10)
+        add_card.pack_propagate(False)
+        
+        # Icon folder
+        ctk.CTkLabel(
+            add_card,
+            text="📁",
+            font=ctk.CTkFont(size=20),
+            text_color="#FFFFFF"
+        ).pack(side="left", padx=(15, 5))
+        
+        # Separator
+        ctk.CTkLabel(
+            add_card,
+            text="|",
+            font=ctk.CTkFont(size=18),
+            text_color="#888888"
+        ).pack(side="left", padx=5)
+        
+        # Button frame
+        btn_frame = ctk.CTkFrame(add_card, fg_color="transparent")
+        btn_frame.pack(side="left", fill="x", expand=True, padx=10)
+        
+        # Nút PDF
+        ctk.CTkButton(
+            btn_frame,
+            text="PDF",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#6B5A7A",
+            text_color="#FFFFFF",
+            hover_color="#7B6A8A",
+            width=60,
+            height=35,
+            corner_radius=10,
+            command=self.open_pdf_file
+        ).pack(side="left", padx=5)
+        
+        # Nút TXT
+        ctk.CTkButton(
+            btn_frame,
+            text="TXT",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#6B5A7A",
+            text_color="#FFFFFF",
+            hover_color="#7B6A8A",
+            width=60,
+            height=35,
+            corner_radius=10,
+            command=self.create_new_note
+        ).pack(side="left", padx=5)
     
     def filter_documents(self):
         """
@@ -393,86 +438,82 @@ class DocumentApplet:
         Args:
             note: Dictionary chứa thông tin note
         
-        Cấu trúc card:
+        Cấu trúc card mới (theo mockup):
         ┌──────────────────────────────────────┐
-        │ ▌ 📕 Title                 🔴 High    │
-        │ ▌     Date: 2024-01-01               │
+        │ � | filename.pdf                    │
         └──────────────────────────────────────┘
-         ↑ Priority bar (màu sắc theo mức độ)
+        - Icon folder bên trái
+        - Separator dọc
+        - Tên file
+        - Viền xanh khi được chọn
         """
-        # Màu sắc theo mức độ ưu tiên
-        priority_colors = {
-            "High": "#FF4444",      # Đỏ - Cao
-            "Medium": "#FFB800",    # Vàng - Trung bình
-            "Normal": "#44BB44"     # Xanh lá - Bình thường
-        }
-        priority = note.get('priority', 'Normal')
-        priority_color = priority_colors.get(priority, "#44BB44")
+        note_id = note.get('id', note.get('title', ''))
+        is_selected = (self.selected_note_id == note_id)
         
         # Card Container - Khung chính của item
-        card = ctk.CTkFrame(
-            self.scroll_frame,
-            fg_color=self.colors['card_bg'],
-            corner_radius=20,
-            height=80
-        )
-        card.pack(fill="x", pady=10)
+        # Viền xanh nếu được chọn
+        if is_selected:
+            card = ctk.CTkFrame(
+                self.scroll_frame,
+                fg_color="#5A4A6A",
+                corner_radius=20,
+                height=55,
+                border_width=2,
+                border_color="#00BFFF"
+            )
+        else:
+            card = ctk.CTkFrame(
+                self.scroll_frame,
+                fg_color="#5A4A6A",
+                corner_radius=20,
+                height=55
+            )
+        card.pack(fill="x", pady=8)
         card.pack_propagate(False)  # Giữ chiều cao cố định
         
-        # Priority Indicator Bar - Thanh màu bên trái thể hiện mức độ ưu tiên
-        priority_bar = ctk.CTkFrame(
+        # Icon folder
+        icon = ctk.CTkLabel(
             card,
-            fg_color=priority_color,
-            corner_radius=10,
-            width=6
+            text="📁",
+            font=ctk.CTkFont(size=20),
+            text_color="#FFFFFF"
         )
-        priority_bar.pack(side="left", fill="y", padx=(8, 0), pady=10)
+        icon.pack(side="left", padx=(15, 5))
         
-        # Icon - Biểu tượng loại file (📕 cho PDF, 📝 cho Note)
-        icon_text = "📕" if note.get('type') == 'pdf' else "📝"
-        icon = ctk.CTkLabel(card, text=icon_text, font=ctk.CTkFont(size=24), text_color=self.colors['card_fg'])
-        icon.pack(side="left", padx=(10, 10))
+        # Separator dọc
+        separator = ctk.CTkLabel(
+            card,
+            text="|",
+            font=ctk.CTkFont(size=18),
+            text_color="#888888"
+        )
+        separator.pack(side="left", padx=5)
         
-        # Info Container - Chứa thông tin title và metadata
-        info_frame = ctk.CTkFrame(card, fg_color="transparent")
-        info_frame.pack(side="left", fill="both", expand=True, pady=10)
-        
-        # Title - Tiêu đề (cắt ngắn nếu quá dài)
+        # Title - Tên file
         title = note.get('title', 'Untitled')
-        if len(title) > 20: title = title[:18] + "..."
-        ctk.CTkLabel(
-            info_frame, 
+        # Thêm đuôi file nếu chưa có
+        if note.get('type') == 'pdf' and not title.lower().endswith('.pdf'):
+            title = title + '.pdf'
+        elif note.get('type') != 'pdf' and not title.lower().endswith('.txt'):
+            title = title + '.txt' if '.' not in title else title
+        
+        title_label = ctk.CTkLabel(
+            card,
             text=title,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=self.colors['card_fg'],
+            font=ctk.CTkFont(size=14),
+            text_color="#FFFFFF",
             anchor="w"
-        ).pack(fill="x")
-        
-        # Metadata Row - Hàng chứa ngày và mức độ ưu tiên
-        meta_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
-        meta_frame.pack(fill="x", pady=(5, 0))
-        
-        # Ngày sửa đổi
-        date_str = note.get('modified', '').split(' ')[0]  # Chỉ lấy phần ngày
-        ctk.CTkLabel(
-            meta_frame,
-            text=f"Date:{date_str}",
-            font=ctk.CTkFont(size=11),
-            text_color=self.colors['card_fg']
-        ).pack(side="left")
-        
-        # Priority Badge - Hiển thị mức độ ưu tiên với emoji
-        priority_emoji = {"High": "🔴", "Medium": "🟡", "Normal": "🟢"}.get(priority, "🟢")
-        ctk.CTkLabel(
-            meta_frame,
-            text=f"{priority_emoji} {priority}",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=self.colors['card_fg']
-        ).pack(side="right", padx=10)
+        )
+        title_label.pack(side="left", fill="x", expand=True, padx=10)
         
         # Click bindings - Bắt sự kiện click vào card
-        for w in [card, icon, info_frame, priority_bar]:
-            w.bind("<Button-1>", lambda e, n=note: self.show_note_content(n))
+        def on_click(e, n=note):
+            self.selected_note_id = n.get('id', n.get('title', ''))
+            # Chuyển sang File View (ẩn list, hiện nội dung)
+            self.show_file_view(n)
+        
+        for w in [card, icon, separator, title_label]:
+            w.bind("<Button-1>", on_click)
             
     def show_add_menu(self):
         """
@@ -503,8 +544,42 @@ class DocumentApplet:
         ).pack(side="right", expand=True, padx=5)
         
     # ========================================================================
-    # PHẦN 5: RIGHT PANEL - HIỂN THỊ NỘI DUNG
+    # PHẦN 5: TOGGLE GIỮA LIST VIEW VÀ FILE VIEW
     # ========================================================================
+    
+    def show_list_view(self):
+        """
+        Hiển thị List View - Danh sách tài liệu
+        
+        - Ẩn right_panel (nội dung file)
+        - Hiển thị left_panel (danh sách file)
+        - Được gọi khi khởi tạo và khi nhấn nút Back
+        """
+        # Ẩn right panel
+        self.right_panel.pack_forget()
+        
+        # Hiển thị left panel (chiếm toàn bộ không gian)
+        self.left_panel.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Khởi tạo nội dung left panel
+        self.init_left_panel()
+    
+    def show_file_view(self, note):
+        """
+        Hiển thị File View - Nội dung file
+        
+        - Ẩn left_panel (danh sách file)
+        - Hiển thị right_panel (nội dung file)
+        - Được gọi khi click vào một file trong danh sách
+        """
+        # Ẩn left panel
+        self.left_panel.pack_forget()
+        
+        # Hiển thị right panel (chiếm toàn bộ không gian)
+        self.right_panel.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Hiển thị nội dung file
+        self.show_note_content(note)
     
     def init_right_panel_placeholder(self):
         """
@@ -549,6 +624,25 @@ class DocumentApplet:
         # Xóa nội dung cũ
         for widget in self.right_panel.winfo_children():
             widget.destroy()
+        
+        # --------------------------------------------------------------------
+        # 0. NÚT BACK - Quay lại danh sách
+        # --------------------------------------------------------------------
+        back_frame = ctk.CTkFrame(self.right_panel, fg_color="transparent")
+        back_frame.pack(fill="x", padx=15, pady=(15, 0))
+        
+        ctk.CTkButton(
+            back_frame,
+            text="← Back",
+            font=ctk.CTkFont(size=14),
+            fg_color="#5A4A6A",
+            text_color="#FFFFFF",
+            hover_color="#6B5A7A",
+            width=100,
+            height=35,
+            corner_radius=15,
+            command=self.show_list_view
+        ).pack(side="left")
             
         # --------------------------------------------------------------------
         # 1. TITLE ENTRY - Ô nhập tiêu đề (có thể chỉnh sửa)
@@ -562,13 +656,19 @@ class DocumentApplet:
             placeholder_text="Title",
             justify="center"
         )
-        title_entry.pack(fill="x", pady=(25, 15), padx=30)
+        title_entry.pack(fill="x", pady=(15, 15), padx=30)
         title_entry.insert(0, note.get('title', ''))
         # Tự động lưu khi focus out
         title_entry.bind("<FocusOut>", lambda e: self.update_title(title_entry.get()))
         
         # --------------------------------------------------------------------
-        # 2. CONTENT CONTAINER - Khung nội dung chính
+        # 2. CONTROL BAR - Pack trước để hiển thị ở đáy
+        # Chứa Priority, Date, và các Action buttons
+        # --------------------------------------------------------------------
+        self.create_control_bar(note)
+        
+        # --------------------------------------------------------------------
+        # 3. CONTENT CONTAINER - Khung nội dung chính
         # Bo tròn nhiều (corner_radius=40) như mockup
         # --------------------------------------------------------------------
         content_container = ctk.CTkFrame(
@@ -576,19 +676,13 @@ class DocumentApplet:
             fg_color=self.colors['content_bg'],
             corner_radius=40
         )
-        content_container.pack(fill="both", expand=True, pady=(0, 15), padx=15)
+        content_container.pack(fill="both", expand=True, pady=(0, 0), padx=15)
         
         # Kiểm tra loại nội dung và render tương ứng
         if note.get('type') == 'pdf':
             self.render_pdf_content(content_container, note)
         else:
             self.render_text_content(content_container, note)
-            
-        # --------------------------------------------------------------------
-        # 3. CONTROL BAR - Thanh điều khiển ở đáy
-        # Chứa Priority, Date, và các Action buttons
-        # --------------------------------------------------------------------
-        self.create_control_bar(note)
         
     def render_text_content(self, parent, note):
         """
@@ -813,36 +907,10 @@ class DocumentApplet:
         bar.pack_propagate(False)  # Giữ chiều cao cố định
         
         # ====================================================================
-        # LEFT SECTION - Priority Dropdown và Date Badge
+        # LEFT SECTION - Date Badge
         # ====================================================================
         left_section = ctk.CTkFrame(bar, fg_color="transparent")
         left_section.pack(side="left", fill="y", padx=(15, 10), pady=8)
-        
-        # Priority Dropdown - Chọn mức độ ưu tiên
-        priority_options = ["🔴 High", "🟡 Medium", "🟢 Normal"]
-        current_priority = note.get('priority', 'Normal')
-        priority_map = {"High": "🔴 High", "Medium": "🟡 Medium", "Normal": "🟢 Normal"}
-        display_priority = priority_map.get(current_priority, "🟢 Normal")
-        
-        priority_var = ctk.StringVar(value=display_priority)
-        priority_menu = ctk.CTkOptionMenu(
-            left_section,
-            values=priority_options,
-            variable=priority_var,
-            fg_color="#E8E8E8",
-            button_color="#D0D0D0",
-            button_hover_color="#B8B8B8",
-            text_color="black",
-            dropdown_fg_color="#FFFFFF",
-            dropdown_text_color="black",
-            dropdown_hover_color="#E8E8E8",
-            corner_radius=12,
-            width=110,
-            height=35,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            command=lambda val: self.update_priority(note, val)
-        )
-        priority_menu.pack(side="left", padx=(0, 8))
         
         # Date Badge - Hiển thị ngày sửa đổi
         date_str = note.get('modified', '').split(' ')[0]
@@ -982,8 +1050,8 @@ class DocumentApplet:
         if messagebox.askyesno("Confirm", "Delete this document?"):
             self.notes = [n for n in self.notes if n['id'] != note_id]
             self.save_notes()
-            self.init_left_panel()
-            self.init_right_panel_placeholder()
+            # Quay về list view sau khi xóa
+            self.show_list_view()
 
     def open_pdf_file(self):
         """
@@ -1196,7 +1264,7 @@ class DocumentApplet:
         Thoát chế độ Split View và khôi phục layout bình thường
         
         1. Hiện lại Sidebar ứng dụng
-        2. Hiện lại Left Panel (danh sách)
+        2. Giữ ở file view (không hiện left panel)
         3. Reload nội dung PDF bình thường
         """
         self.is_split_mode = False
@@ -1210,56 +1278,60 @@ class DocumentApplet:
         self.right_panel.grid_columnconfigure(0, weight=0)
         self.right_panel.grid_columnconfigure(1, weight=0)
         
-        # Hiện lại Left Panel
-        self.left_panel.pack(side="left", fill="both", expand=False, padx=20, pady=20)
+        # KHÔNG hiện lại Left Panel - giữ ở file view
+        # self.left_panel.pack(...) - đã bỏ
+        
+        # Đảm bảo right_panel được hiển thị đúng cách
+        self.right_panel.pack_forget()
+        self.right_panel.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Reload view PDF bình thường
         self.show_note_content(self.current_note)
 
     def get_linked_note(self, pdf_note):
         """
-        Tìm hoặc tạo note liên kết với PDF
+        Lấy hoặc tạo note liên kết với PDF
         
         Args:
             pdf_note: Note PDF đang xem
         
         Returns:
-            dict: Note liên kết (hiện có hoặc mới tạo)
+            dict: Note liên kết (được lưu trực tiếp trong PDF document)
         
-        Logic:
-        1. Tìm note có title = "Note: {PDF_title}"
-        2. Nếu không tìm thấy, tạo mới
+        Logic mới:
+        - Note được lưu trực tiếp vào trường 'notes' của PDF document
+        - Không tạo file note riêng biệt
         """
         pdf_name = pdf_note.get('title', 'Unknown')
-        note_title = f"Note: {pdf_name}"
         
-        # Tìm note đã tồn tại
-        for note in self.notes:
-            if note.get('title') == note_title and note.get('type') == 'note':
-                return note
-                
-        # Tạo note mới nếu chưa có
-        new_note = {
-            'id': f"note_linked_{datetime.now().strftime('%Y%m%d%H%M%S')}",
-            'title': note_title,
-            'content': '',
-            'type': 'note',
-            'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'modified': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Kiểm tra xem PDF đã có notes chưa
+        if 'notes' not in pdf_note:
+            pdf_note['notes'] = ''
+            self.save_notes()
+        
+        # Trả về một dict giả để tương thích với code hiện tại
+        return {
+            'id': f"embedded_note_{pdf_note.get('id', '')}",
+            'title': f"Notes for: {pdf_name}",
+            'content': pdf_note.get('notes', ''),
+            'type': 'embedded_note',
+            'pdf_id': pdf_note.get('id', '')
         }
-        self.notes.append(new_note)
-        self.save_notes()
-        return new_note
 
     def save_split_note(self, note):
         """
         Lưu note trong chế độ Split View
         
         Args:
-            note: Note đang chỉnh sửa
+            note: Note đang chỉnh sửa (embedded note dict)
+        
+        Note được lưu trực tiếp vào trường 'notes' của PDF document
         """
-        if hasattr(self, 'current_text_widget'):
-            note['content'] = self.current_text_widget.get("1.0", "end-1c")
-            note['modified'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        if hasattr(self, 'current_text_widget') and self.current_note:
+            content = self.current_text_widget.get("1.0", "end-1c")
+            
+            # Lưu vào trường 'notes' của PDF document
+            self.current_note['notes'] = content
+            self.current_note['modified'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             self.save_notes()
             messagebox.showinfo("Saved", "Note saved successfully!")
