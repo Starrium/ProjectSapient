@@ -1,16 +1,30 @@
 # Sapient App Dependencies
 # Install with: pip install -r requirements.txt
 
+# ============================================
 # GUI Framework
+# ============================================
 customtkinter>=5.2.0
 
-# Calendar Widget
+# ============================================
+# Calendar Widget  
+# ============================================
 tkcalendar>=1.6.1
 
+# ============================================
+# PDF Processing (for Document Viewer)
+# ============================================
+PyMuPDF>=1.23.0
+
+# ============================================
+# Image Processing (for PDF rendering)
+# ============================================
+Pillow>=10.0.0
+
+# ============================================
 # Note: tkinter comes built-in with Python
 # If you're on Linux and tkinter is missing, install it with:
 # Ubuntu/Debian: sudo apt-get install python3-tk
 # Fedora: sudo dnf install python3-tkinter
 # Arch: sudo pacman -S tk
-
-# currently, i have no way of editing an existing task, i wanted to edit it by clicking the task card and it opens the detailed task which in the right frame. Also wierd choice but i wanted the delete button beside the save button
+# ============================================
